@@ -1,0 +1,38 @@
+#!/bin/bash
+# What does the working radius cost, and what is it worth?
+#
+# The cache caps sight-lines at MAX_RANGE.  Anything beyond that is invisible to the
+# search but still counted by the exact evaluator, so a cap that is too tight makes the
+# optimiser blind to coverage it is nonetheless entitled to claim -- on the sample dataset
+# a single antenna 1800 m away supplies 31% of one building's perimeter.  This builds the
+# cache at several radii and reports time and size for each, so the default can be chosen
+# on measurements instead of on a guess.
+#
+#   sbatch slurm/range.sbatch
+#
+#SBATCH --job-name=giscup-range
+#SBATCH --partition=batch
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=128
+#SBATCH --mem=384G
+#SBATCH --time=08:00:00
+#SBATCH --output=logs/range-%j.out
+#SBATCH --error=logs/range-%j.err
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$PWD}"
+
+DATA="${DATA:-data/sample.bin}"
+RANGES="${RANGES:-600 1200 2400 100000}"
+
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-128}"
+export OMP_PROC_BIND=spread
+export OMP_PLACES=cores
+
+echo "host=$(hostname) threads=${OMP_NUM_THREADS} data=${DATA}"
+for R in $RANGES; do
+    echo "================ max-range ${R} ================"
+    ./bin/gis_cup precompute --data "$DATA" --out "data/range_${R}.bin" --max-range "$R"
+    ls -la "data/range_${R}.bin"
+done
