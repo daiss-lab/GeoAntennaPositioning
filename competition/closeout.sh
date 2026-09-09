@@ -1,18 +1,4 @@
 #!/bin/bash
-# closeout.sh -- end the search at an absolute time and run the tail of the pipeline.
-#
-#   ./competition/closeout.sh <solve-end-epoch> [polish-minutes]
-#
-# The overnight pipeline chained polish and finalize behind the solve array with
-# `afterany`, which is right when the array's own deadline is the end of the window.  For a
-# short window the deadline moved after the array was already running, and a running task's
-# --deadline is baked into its argv.  So the search is ended from outside instead: every
-# solve-side job is cancelled at the chosen moment, and polish and finalize are submitted
-# against the new clock.
-#
-# Cancelling is safe and loses nothing.  Every solver checkpoints its answer to disk each
-# sync and rewrites it only on improvement, so the file on disk at cancellation time is the
-# best that task ever had, already scored and already valid.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -1,13 +1,4 @@
 #!/bin/bash
-# Ablation: turn each of the new mechanisms off one at a time and see what it was worth.
-#
-# A 2x2 against the previous solution says the new code is better; it does not say which
-# part of it is.  Each cell below is the full Solution02 with exactly one mechanism
-# disabled, at the same budget, seed and cache as the full configuration, so the
-# difference is attributable.
-#
-#   sbatch slurm/ablate.sbatch
-#
 #SBATCH --job-name=giscup-abl
 #SBATCH --partition=batch
 #SBATCH --array=0-3
@@ -28,8 +19,6 @@ OUTDIR="${OUTDIR:-results/ablate}"
 TIME_BUDGET="${TIME_BUDGET:-600}"
 REPLICAS="${REPLICAS:-${SLURM_CPUS_PER_TASK:-16}}"
 
-# One array task per (tau, k) that the mechanisms are expected to matter most for, plus
-# one where they should not, as a control.
 TAUS=(0.75 0.75 0.5 0.25)
 KS=(50 500 500 500)
 
@@ -56,7 +45,7 @@ run() {
 run full
 run no_bundles   --bundles 0
 run no_grasp     --grasp-prob 0
-run no_sync      --sync 1000000     # one round: replicas never share
+run no_sync      --sync 1000000
 run phi_squared  --phi-exp 2.0
 
 echo "======== summary (exact scores) ========"

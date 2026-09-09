@@ -1,26 +1,4 @@
 #!/usr/bin/env python3
-"""
-package.py -- build the archive that gets uploaded to EasyChair.
-
-    python3 competition/package.py --solution results/submission.txt \
-        --cells data/cells.txt --dataset GIS-cup-competition-dataset.geojson \
-        --out Final_Submission
-
-The organisers ask for one archive (.zip, .tgz, .tar or .gz) holding two things:
-
-  * a text file with the solutions for every sub-problem, three lines each -- the
-    (tau, k) pair, the k coordinates, and the ids claimed as serviced;
-  * a folder with the source code and instructions for building and running it.
-
-Both must be in the same archive.  This assembles exactly that, and refuses to write one
-it can see is wrong.
-
-The checks here are structural and duplicate what evaluator/official/official-validate.ts
-does against the organisers' own parser.  Duplicating them is deliberate: this one needs
-no Node runtime, so a packaging step still runs if the vendored evaluator is unavailable,
-and the two implementations agreeing is worth more than either alone.  `--require-valid`
-additionally refuses to package unless the Node validator has already passed.
-"""
 
 import argparse
 import json
@@ -30,19 +8,13 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 
-# Explicit, because a competition archive is not the place for a surprise.  Directories
-# are copied whole but filtered by SOURCE_SUFFIXES; anything not listed here never goes in
-# -- notably evaluator/, which is 9.7 GB of the organisers' own code and a Node runtime,
-# and data/, results/ and logs/, which are outputs rather than source.
 SOURCE_DIRS = ["src", "python", "slurm", "competition", "tests"]
 SOURCE_FILES = ["Makefile", "DOCUMENTATION.md"]
 SOURCE_SUFFIXES = (".cpp", ".hpp", ".h", ".py", ".sh", ".sbatch", ".md", ".ts", ".txt")
 
-
 def fail(message):
     print("FATAL: %s" % message)
     return False
-
 
 def load_cells(path):
     if path is None:
@@ -56,9 +28,7 @@ def load_cells(path):
                 cells.append((parts[0], parts[1]))
     return cells
 
-
 def check_solution(path, cells):
-    """Everything that can be known about the file without the dataset."""
     ok = True
     with open(path) as fh:
         raw = fh.read()
@@ -96,9 +66,6 @@ def check_solution(path, cells):
         if not (0.0 < tau <= 1.0):
             ok = fail("block %d: tau=%s is outside (0, 1]" % (index + 1, tau_text))
 
-        # Coordinates.  Parsed the way the organisers parse them, and checked for the one
-        # thing that silently costs precision: a value that does not survive the round
-        # trip through the text we are about to ship.
         entries = [e for e in coords_line.split(")") if e.strip().strip(",")]
         n_bad = 0
         n_round = 0
@@ -139,7 +106,6 @@ def check_solution(path, cells):
 
     return ok, blocks
 
-
 def copy_source(root, dest):
     os.makedirs(dest, exist_ok=True)
     copied = 0
@@ -163,7 +129,6 @@ def copy_source(root, dest):
                              os.path.join(target_dir, filename))
                 copied += 1
     return copied
-
 
 README = """# ACM SIGSPATIAL GIS Cup 2026 -- antenna placement
 
@@ -256,7 +221,6 @@ a re-run on different hardware explores a different amount and can land on a dif
 answer of similar quality.
 """
 
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -346,7 +310,6 @@ def main():
     print("  contents:  solution.txt, README.md, MANIFEST.txt, source/ (%d files)" % n_source)
     print("\nUpload %s to https://easychair.org/conferences/?conf=giscup2026" % archive)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

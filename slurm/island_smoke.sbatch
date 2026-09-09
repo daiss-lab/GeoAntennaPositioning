@@ -1,12 +1,4 @@
 #!/bin/bash
-# Checks that migration actually moves solutions between processes before anything large
-# is submitted.  Three islands on one node, one shared directory, short budget.  What the
-# log has to show is the "islands: N foreign elites seen ... M adopted" line with N > 0 --
-# a silent zero there means the mechanism is wired up but inert, which is exactly the
-# failure mode Solution03 hit with `refine`.
-#
-#   sbatch slurm/island_smoke.sbatch
-#
 #SBATCH --job-name=gis4-ismoke
 #SBATCH --partition=debug
 #SBATCH --nodes=1

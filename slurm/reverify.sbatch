@@ -1,8 +1,4 @@
 #!/bin/bash
-# Re-runs the fixed verifier over the three Solution01 answers that previously reported
-# FAIL, to establish whether those failures were real or an artefact of the old
-# --antenna-radius 1200 default.
-#
 #SBATCH --job-name=giscup-rever
 #SBATCH --partition=batch
 #SBATCH --array=0-2

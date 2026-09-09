@@ -1,16 +1,4 @@
 #!/bin/bash
-# Does the island model turn many nodes into one search, or just into many searches?
-#
-# ISLANDS separate jobs work on the *same* sub-problem, each publishing its leader into a
-# shared directory every sync and adopting the best it finds there.  The control is the
-# same total compute spent as ISLANDS independent runs with no sharing (SHARE=0), scored
-# by taking the best of them -- which is what a naive "run it lots of times" would give.
-# The comparison is therefore migration versus best-of-N at identical cost, not against a
-# smaller budget.
-#
-#   ISLANDS=8 BUDGET=2400 sbatch slurm/island.sbatch          # shared
-#   ISLANDS=8 BUDGET=2400 SHARE=0 TAG=nosh sbatch slurm/island.sbatch   # control
-#
 #SBATCH --job-name=gis4-island
 #SBATCH --partition=batch
 #SBATCH --nodes=1
@@ -63,8 +51,6 @@ fi
 echo "host=$(hostname) cell=${CELL} island=${ISL}/${ISLANDS} tau=${TAU} k=${K} share=${SHARE} budget=${BUDGET}s"
 date -u +"start %Y-%m-%dT%H:%M:%SZ"
 
-# Islands must differ or migration has nothing to trade.  Seeds are spread by island, not
-# only by cell.
 "$BIN" solve \
     --data "$DATA" \
     --cache "$CACHE" \

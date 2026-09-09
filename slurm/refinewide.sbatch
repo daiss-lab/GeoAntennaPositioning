@@ -1,26 +1,4 @@
 #!/bin/bash
-# refinewide.sbatch -- the same across-edge refinement as polish5, over a wider
-# neighbourhood, on every cell.
-#
-# WHY A SECOND REFINE AT ALL
-#
-# polish5 runs refine with the parameters that were tuned on the sample dataset: 48 trials
-# per antenna, 48 relocation edges within 120 m, 28 event vertices within 220 m.  The
-# competition dataset is a different shape -- 50,000 buildings in 10.6 x 10.8 km against the
-# sample's far sparser field -- and on a denser field the nearest 48 edges cover a much
-# smaller piece of ground.  So the tuned radius may simply be looking at less of the map
-# than it was designed to.
-#
-# This is cheap to answer rather than argue about: run the wider neighbourhood alongside,
-# write it under its own name, and let finalize's maximum decide.  Refine is monotone
-# against the answer it is given, so the wide pass cannot return something worse than its
-# input, and a wide pass that finds nothing extra simply loses the max to the narrow one.
-#
-# The deadline is honoured mid-sweep: refine.cpp:308 breaks out of the antenna loop when
-# the clock runs out and writes the answer built from the moves accepted so far, every one
-# of which was a non-negative exact-evaluator change.  A cut is therefore safe -- it costs
-# the rest of the sweep and nothing else -- which is what makes it reasonable to point a
-# 4x-wider search at k=484 with a fixed budget.
 
 #SBATCH --job-name=gis5-refwide
 #SBATCH --partition=batch

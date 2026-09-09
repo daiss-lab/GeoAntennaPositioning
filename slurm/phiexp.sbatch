@@ -1,18 +1,4 @@
 #!/bin/bash
-# How much should partial progress towards tau be rewarded?
-#
-# The surrogate credits a building with g(covered/required).  With g the identity it is a
-# clipped coverage function -- monotone submodular, so greedy has a guarantee.  Bending g
-# upwards (g(x) = x^gamma) makes a building that is nearly finished worth more per slot
-# than one that has barely started, which concentrates antennas where they can actually
-# complete something.  It also gives up the submodularity, and therefore the guarantee.
-#
-# The single-seed ablation suggested gamma = 2 is worth around 1%, which is the same size
-# as the seed-to-seed spread, so it proved nothing.  This runs three seeds per cell across
-# all three taus so the effect can be separated from the noise.
-#
-#   sbatch slurm/phiexp.sbatch
-#
 #SBATCH --job-name=giscup-phi
 #SBATCH --partition=batch
 #SBATCH --array=0-8

@@ -28,14 +28,14 @@ void readVec(std::ifstream& fh, std::vector<T>& v, size_t n) {
     if (!fh) throw std::runtime_error("truncated visibility cache");
 }
 
-}  // namespace
+}
 
 void buildVisCache(const Domain& dom, const SlotLayout& layout,
                    const std::vector<Candidate>& cands, const VisibilityParams& vp,
                    SlotRule rule, VisCache& out, size_t progress_every) {
     const size_t n = cands.size();
     out.cands = cands;
-    out.slot_target_len = 0.0;  // filled by the caller
+    out.slot_target_len = 0.0;
     out.total_slots = layout.total_slots;
     out.num_buildings = dom.numBuildings();
     out.boundary_blocks = vp.boundary_blocks ? 1 : 0;
@@ -84,7 +84,6 @@ void buildVisCache(const Domain& dom, const SlotLayout& layout,
     for (size_t i = 0; i < n; ++i) out.run_offset[i + 1] = out.run_offset[i] + per_cand[i];
 
     out.runs.resize(out.run_offset[n]);
-    // Chunks are contiguous in candidate order, so each one lands in a single memcpy.
 #pragma omp parallel for schedule(static)
     for (long long ci = 0; ci < (long long)n_chunks; ++ci) {
         const size_t lo = size_t(ci) * kChunk;
@@ -138,4 +137,4 @@ void VisCache::load(const std::string& path) {
     readVec(fh, runs, nr);
 }
 
-}  // namespace gis
+}

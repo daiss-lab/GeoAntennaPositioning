@@ -1,19 +1,4 @@
 #!/bin/bash
-# Head-to-head, as a 2x2: {Solution01, Solution02} x {600 m cache, 2400 m cache}.
-#
-# Two things changed between the solutions and they need separating.  The optimiser is
-# different, and so is the working radius the visibility cache is built at -- and the
-# radius is a flag both solvers accept, so attributing its effect to the new code would
-# be wrong.  Running all four cells at an identical time budget and replica count says
-# how much each is worth on its own.
-#
-# Every answer is re-scored afterwards by `score`, which reads the emitted file the way a
-# third party would.  The comparison is therefore one evaluator reading four files, not
-# each solver marking its own work.
-#
-#   sbatch slurm/bench.sbatch
-#   TIME_BUDGET=1800 sbatch slurm/bench.sbatch
-#
 #SBATCH --job-name=giscup-bench
 #SBATCH --partition=batch
 #SBATCH --array=0-8

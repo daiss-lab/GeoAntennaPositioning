@@ -1,34 +1,4 @@
 #!/bin/bash
-# claimband.sh -- build a submission variant whose claim lines are widened by F, and
-# (optionally) score it with the organisers' own evaluator so the choice of F is a
-# measurement rather than an opinion.
-#
-#   ./competition/claimband.sh 0.02                  # build results/submission-band0.02.txt
-#   ./competition/claimband.sh 0.02 --score DATASET  # ...and submit the official scoring
-#
-# WHY THIS EXISTS, AND WHAT IT IS NOT FOR
-#
-# The organisers score `verifiedServiceScore = |claims INTERSECT verified|`.  A serviced
-# building we fail to claim scores nothing; a claimed building that fails costs only a
-# CLAIM_BELOW_THRESHOLD warning.  The payoff is therefore one-sided, and the score is
-# MONOTONE in how much we claim -- which means "what F maximises the score" has the trivial
-# and dishonest answer "claim everything".  That is what `--claim-all` does and it is not
-# what this script is for.
-#
-# The honest use is narrow.  Our geometry is stricter than the evaluator's: the organisers
-# snap antennas within 0.001 m to the boundary and run ArcGIS relate operators at that same
-# xyTolerance, so a sight line we compute as grazing-and-blocked can be topologically clear
-# for them.  Buildings whose coverage we compute just below tau are ones we genuinely
-# believe may be serviced -- claiming those is a statement of belief under known
-# uncertainty.  Claiming a building we compute at 0.05 coverage is not.
-#
-# So F should be small enough that every claim it adds is a building we could not
-# distinguish from serviced, and the measurement below tells you what each F is worth so
-# that the trade is made with numbers in view.  The ranking that picks which answer to
-# submit always uses the honest `serviced` count and is untouched by F.
-#
-# claim_floor = tau - F  (see src/evaluate.cpp: the `relative` in --claim-band's help is
-# nominal, since max(1.0, tau) is 1 for every tau in this competition).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -53,15 +23,12 @@ WORK="results/band$F"
 rm -rf "$WORK" "$WORK-labelled"
 mkdir -p "$WORK"
 
-# Re-emit each cell's answer with a widened claim line.  The antenna positions are
-# untouched: this changes only which buildings the file claims, never where anything is.
 for f in "$SRC"/*.txt; do
     [ -e "$f" ] || continue
     "$BIN" score --data "$DATA" --solution "$f" --claim-band "$F" \
         --rewrite "$WORK/$(basename "$f")" > "$WORK/$(basename "$f" .txt).score" 2>&1
 done
 
-# Same tail as finalize5.sbatch: solver ids -> dataset ids, then assemble.
 IDS="${DATA}.ids"
 DIR="$WORK"
 if [ -r "$IDS" ]; then

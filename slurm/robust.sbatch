@@ -1,21 +1,4 @@
 #!/bin/bash
-# The evaluation dataset's tau and k are not promised to be the nine cells measured here.
-# Everything in Solution01 through Solution03 was tuned on tau in {0.25, 0.5, 0.75} and
-# k in {50, 500, 1000}, and at least one default -- Solution02's "gamma = 2 for tau >= 0.5
-# and k <= 500" -- was a step function fitted on a grid of three k values, which its own
-# documentation flagged as "500 and below, on this dataset" rather than a measured boundary.
-#
-# This sweeps a much wider grid to find out where the solver's behaviour is smooth and
-# where it has a cliff.  What matters is not the absolute scores -- they are not comparable
-# across cells -- but three things that would each be a defect:
-#
-#   * a cell that crashes, times out, or emits an answer that fails to re-score;
-#   * a measured slot margin that jumps around rather than varying smoothly with tau;
-#   * a k where the score per antenna collapses, which would mean a tuned constant is
-#     binding somewhere it should not.
-#
-#   sbatch slurm/robust.sbatch
-#
 #SBATCH --job-name=gis4-robust
 #SBATCH --partition=batch
 #SBATCH --array=0-41%14
@@ -37,9 +20,6 @@ OUTDIR="${OUTDIR:-results/robust}"
 BUDGET="${BUDGET:-600}"
 REP="${REP:-64}"
 
-# Seven thresholds spanning well outside the published three, and six antenna counts
-# spanning a factor of 80.  k = 2000 and tau = 0.9 are both past anything the solver has
-# been asked for; that is the point of including them.
 TAUS=(0.15 0.25 0.35 0.5 0.6 0.75 0.9)
 KS=(25 50 200 500 1000 2000)
 

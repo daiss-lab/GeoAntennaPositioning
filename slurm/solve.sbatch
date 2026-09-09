@@ -1,15 +1,4 @@
 #!/bin/bash
-# Solves the nine (tau, k) sub-problems as a job array -- one array task each, so they
-# run concurrently on separate nodes.  The visibility cache is shared and read-only, so
-# precompute must have finished first.
-#
-#   sbatch slurm/precompute.sbatch          # once
-#   TIME_BUDGET=3600 sbatch slurm/solve.sbatch
-#
-# DEADLINE is a unix timestamp.  When it is set the solver stops by then regardless of
-# TIME_BUDGET, and because the answer file is rewritten at every checkpoint, a task that
-# is cut short still leaves a complete, exactly scored answer behind.
-#
 #SBATCH --job-name=giscup-solve
 #SBATCH --partition=batch
 #SBATCH --array=0-8

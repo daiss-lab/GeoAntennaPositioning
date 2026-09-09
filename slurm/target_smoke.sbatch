@@ -1,11 +1,4 @@
 #!/bin/bash
-# Confidence check on the targeted destroy before a 162-task array depends on it: that it
-# runs, that the answer it writes still re-scores cleanly from the file, and that it is not
-# obviously worse than the three-mode search on the cell where it should matter most
-# (tau = 0.75, where every point needs at least two antennas and the score is flattest).
-#
-#   sbatch slurm/target_smoke.sbatch
-#
 #SBATCH --job-name=gis4-tsmoke
 #SBATCH --partition=debug
 #SBATCH --nodes=1

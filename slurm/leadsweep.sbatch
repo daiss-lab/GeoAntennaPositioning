@@ -1,31 +1,4 @@
 #!/bin/bash
-# The search ranks placements by the slot model.  The slot model is wrong about which
-# placement is best, and it is wrong about half the time.
-#
-# Measured over the 291 shortlists printed in the Solution02-04 logs:
-#
-#   best slot score is also the best exact score   53% of the time
-#   buildings gained by checking the shortlist     mean 2.3, p90 7, max 46
-#   rank of the true winner within the shortlist   0:155  1:46  2:31  3:16  4:11  5:14  6:11  7:7
-#
-# Two separate defects hide in that, and this array separates them:
-#
-#   * The shortlist is truncated at 8 and the rank distribution has not decayed at 7 --
-#     11, 14, 11, 7 at ranks 4-7.  Winners are being cut off by the cap.  Arm 1 raises it.
-#   * Worse, the *search itself* steers by the same broken signal.  Every synchronisation
-#     point copies "the leader" into the trailing replicas, chosen by slot score -- so on
-#     roughly half of them the search propagates a solution that is not the best one it
-#     holds and overwrites one that was.  Arms 2 and 3 pick the leader by exact score.
-#
-#   arm 0   shortlist 8,  exact-lead 0    Solution04 exactly
-#   arm 1   shortlist 24, exact-lead 0    the cap alone
-#   arm 2   shortlist 24, exact-lead 6    the cap plus honest leader selection
-#   arm 3   shortlist 24, exact-lead 12   twice as much of it, to see the cost curve
-#
-# 6 cells x 2 seeds, paired, arm varying fastest with the index.
-#
-#   sbatch --array=0-47%24 slurm/leadsweep.sbatch
-#
 #SBATCH --job-name=gis5-lead
 #SBATCH --partition=batch
 #SBATCH --nodes=1

@@ -1,28 +1,4 @@
 #!/bin/bash
-# refine484.sbatch -- run the across-edge refinement on the three k=484 cells, now.
-#
-# WHY THIS EXISTS
-#
-# polish5 has never actually run on the competition answers.  Both earlier polish arrays
-# (1025774 and its predecessor) exited in two seconds against the SAMPLE cells, because
-# they were submitted without CELLS_FILE and slurm/cells.sh reads unset as "development
-# run".  results/run holds no polished_* file at all, so every antenna in the current
-# submission still sits exactly where solve put it, on a candidate position from the
-# discretised precompute -- and refine's whole job is to move it off that grid onto the
-# tangency events and neighbouring-edge vertices that the exact evaluator prefers.
-#
-# The queued polish (1025785) will do this at 09:00 UTC, but it will do it to whichever
-# answer is best AT THAT MOMENT.  If island484 has by then overtaken the incumbent, the
-# incumbent's own refinement gain is never banked anywhere.  Running it now costs three
-# tasks and makes the two lines of attack independent: finalize takes the maximum over
-# both, so whichever wins, the other cannot cost anything.
-#
-# Refine is monotone by construction -- its acceptance rule initialises best_dscore to 0,
-# so a move that loses buildings is never taken -- and it re-scores what it writes with the
-# exact evaluator.  It cannot return an answer worse than the one it was given.
-#
-# Output is s9<TAG><cell>_tau<tau>_k<k>.txt, which the s* glob in polish5 and finalize5
-# already ranks, so nothing downstream needs to know this ran.
 
 #SBATCH --job-name=gis5-ref484
 #SBATCH --partition=batch
@@ -55,9 +31,6 @@ export OMP_PLACES=cores
 
 claims() { awk 'NR==3{n=split($0,a,","); c=0; for(i=1;i<=n;i++) if(length(a[i])>0) c++; print c}' "$1" 2>/dev/null; }
 
-# Best answer for this cell right now, by the emitted claim line -- the same quantity
-# finalize ranks on.  Excludes this job's own output tags so a re-run refines the current
-# best rather than its own previous result.
 BEST=""; BEST_N=-1
 for f in "${RUN}"/s*_tau${TAU}_k${K}.txt "${RUN}"/polished_tau${TAU}_k${K}.txt; do
     [ -e "$f" ] || continue
@@ -85,5 +58,3 @@ echo "deadline $(date -u -d @${REFINE_END}) UTC"
 
 NEW=$(claims "$OUT"); NEW="${NEW:--1}"
 echo "tau=${TAU} k=${K}: ${BEST_N} -> ${NEW} (${OUT})"
-# A refinement that somehow came back short is simply left on disk: finalize ranks by the
-# maximum over all s* files, so it can be ignored but never lose the cell.

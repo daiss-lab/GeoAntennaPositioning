@@ -1,10 +1,4 @@
 #!/bin/bash
-# Calibration sweep: how faithfully does the slot discretisation track the exact score?
-#
-# The optimiser ranks candidates using slot counts, so a slot rule that drifts from the
-# exact coverage makes it optimise the wrong thing.  This compares the greedy slot-score
-# against the exact score for each rule/resolution.
-#
 #SBATCH --job-name=giscup-cal
 #SBATCH --partition=batch
 #SBATCH --nodes=1

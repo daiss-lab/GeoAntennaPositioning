@@ -1,29 +1,10 @@
 #!/usr/bin/env python3
-"""pick_best.py -- choose the winning answer per sub-problem out of every run made.
-
-Solution04 produces many answers per (tau, k): several islands, several configurations,
-several seeds.  Only one of each can be submitted, and the choice must be made on the
-score rather than on which run was expected to be best -- an arm that loses on average can
-still hold the best single answer for one cell, and there is no reason to leave it behind.
-
-Selection is on the claim line, which is the list of buildings the exact evaluator
-confirmed at the moment the file was written.  It is a verified quantity, not the solver's
-opinion: `writeSolution` only ever emits what `evaluateExact` returned.  The winners are
-re-scored independently afterwards by slurm/finalize.sbatch, so a corrupt or stale file
-cannot reach a submission on the strength of a long claim line alone.
-
-Usage:
-    python3 python/pick_best.py results/fact results/scale results/island_sh \\
-        --out results/final [--copy]
-"""
 import argparse
 import os
 import shutil
 import sys
 
-
 def parse_header(path):
-    """(tau, k, n_antennas, n_claimed) or None if the file is not a usable answer."""
     try:
         with open(path) as fh:
             lines = [ln.rstrip('\n') for ln in fh if ln.strip()]
@@ -42,7 +23,6 @@ def parse_header(path):
         claimed = len(lines[2].split(','))
     return tau, k, n_ant, claimed
 
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('dirs', nargs='+')
@@ -51,7 +31,7 @@ def main():
     ap.add_argument('--top', type=int, default=3, help='runners-up to list per cell')
     args = ap.parse_args()
 
-    best = {}      # (tau, k) -> list of (claimed, n_ant, path)
+    best = {}
     scanned = skipped = 0
     for d in args.dirs:
         for root, _dirs, files in os.walk(d):
@@ -65,8 +45,6 @@ def main():
                     skipped += 1
                     continue
                 tau, k, n_ant, claimed = h
-                # An answer with the wrong number of antennas is not a valid submission for
-                # this sub-problem whatever it claims, so it never competes.
                 if n_ant != k:
                     skipped += 1
                     continue
@@ -97,7 +75,6 @@ def main():
     if len(best) != 9:
         print('WARNING: expected 9 sub-problems, found %d' % len(best), file=sys.stderr)
     return 0
-
 
 if __name__ == '__main__':
     sys.exit(main())

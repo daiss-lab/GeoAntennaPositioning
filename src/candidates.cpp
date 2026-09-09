@@ -13,7 +13,6 @@ Candidate snapToBoundary(const Domain& dom, const Vec2& world, double* dist_out)
     double best_d2 = std::numeric_limits<double>::infinity();
     double best_t = 0.0;
 
-    // Expanding search, so a well-formed answer costs one small grid query.
     GridScratch scratch;
     scratch.reset(dom.numEdges());
     std::vector<uint32_t> edges;
@@ -31,14 +30,11 @@ Candidate snapToBoundary(const Domain& dom, const Vec2& world, double* dist_out)
                 best_t = t;
             }
         }
-        // Only trust the result once the search radius exceeds the distance found, or the
-        // whole domain has been swept.
         if (best_d2 < radius * radius || radius > dom.diagonal()) break;
         radius *= 2.0;
     }
     if (!std::isfinite(best_d2)) throw std::runtime_error("no edge found near an antenna");
 
-    // Snap onto a vertex when the projection lands within a nanometre of one.
     const double len = dom.edgeLen(best_e);
     const double along = best_t * len;
     if (along <= 1e-9) {
@@ -69,13 +65,10 @@ std::vector<Candidate> generateCandidates(const Domain& dom, const CandidatePara
 }
 
 Vec2 candidateWorldPos(const Domain& dom, const Candidate& c) {
-    // Computed in world coordinates so the emitted point is exactly what an evaluator
-    // reproducing "vertex + t * (next - vertex)" would obtain.  At t == 0 this returns
-    // the input vertex bit-for-bit.
     const Vec2 a = dom.toWorld(dom.edgeA(c.edge));
     if (c.t == 0.0) return a;
     const Vec2 b = dom.toWorld(dom.edgeB(c.edge));
     return a + (b - a) * c.t;
 }
 
-}  // namespace gis
+}

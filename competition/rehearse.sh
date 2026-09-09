@@ -1,23 +1,4 @@
 #!/bin/bash
-# rehearse.sh -- run the whole competition path on a synthetic dataset, in about a minute.
-#
-#   ./competition/rehearse.sh [workdir]
-#
-# Run this on the morning of the competition, before the dataset drops.  It exercises every
-# step GO.sh and FINISH.sh will take -- parameters file, prepare, precompute, solve,
-# relabel, assemble, the organisers' validator, packaging -- and asserts each one.
-#
-# The fixture is deliberately hostile in the two ways the real dataset is allowed to be and
-# the sample dataset is not:
-#
-#   * building ids are strings ("BLD-0000"), not the small integers the sample uses.  The
-#     organisers canonicalise an id as String(id).trim() and accept anything;
-#   * tau and k are not the sample's values, because the rules say the sample's values are
-#     only an example.
-#
-# It is small enough to run on a login node in seconds, so it does not need SLURM -- which
-# also means it checks the solver and the plumbing, not the queue.  What it cannot tell you
-# is whether a 20-hour window divides sensibly; only a real run does that.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -50,7 +31,6 @@ echo "=============================================================="
 echo " rehearsal in $WORK"
 echo "=============================================================="
 
-# ---- the fixture -----------------------------------------------------------------------
 make_fixture() {
     python3 - "$WORK" <<'PYEOF'
 import json, sys
@@ -86,9 +66,6 @@ solve_all() {
     done < "$WORK/cells.txt"
 }
 
-# Each of these runs in a subshell.  The evaluator has to be invoked from its own directory
-# and a `cd` in a plain function would leak into every step after it -- which it did, and
-# the first run of this script "passed" a validation of a file that did not exist.
 validate() (
     [ -x "$NODEBIN/node" ] || { echo "no vendored node; skipped"; return 0; }
     [ -s "$WORK/submission.txt" ] || { echo "no submission to validate"; return 1; }
@@ -99,9 +76,6 @@ validate() (
         "$WORK/dataset.geojson" "$WORK/submission.txt" "$WORK/cells.txt"
 )
 
-# The point of the fixture: without relabelling, the claim line carries positional handles
-# and the organisers' parser rejects every one of them.  If that assertion ever stops
-# holding, the relabel step has become a no-op and nobody would notice.
 unrelabelled_must_fail() (
     [ -x "$NODEBIN/node" ] || return 0
     "$PY" python/assemble.py --dir "$WORK/final" --out "$WORK/raw.txt" \
@@ -117,7 +91,6 @@ unrelabelled_must_fail() (
     return 0
 )
 
-# The rules ask for both halves in the same archive: the result file and the source.
 archive_contents() {
     local listing
     listing=$(unzip -Z1 "$WORK/Final_Submission.zip") || return 1

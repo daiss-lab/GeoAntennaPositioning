@@ -1,10 +1,3 @@
-// selftest.cpp -- correctness checks for the visibility engine.
-//
-// Two independent layers:
-//   * hand-built scenes that pin down the tangency rule of Definition 1, because that
-//     rule is what makes corner self-coverage work and it is easy to break silently;
-//   * randomised scenes compared against a brute-force O(edges) reference, which
-//     validates the shell expansion and angular bucketing.
 #include <array>
 #include <cstdio>
 #include <string>
@@ -26,7 +19,6 @@ void check(bool cond, const char* what) {
     }
 }
 
-// Total visible length on building `b` from the arcs produced for one candidate.
 double visibleLengthOn(const Domain& dom, const std::vector<VisArc>& arcs, uint32_t b) {
     double total = 0.0;
     for (const VisArc& a : arcs)
@@ -38,7 +30,6 @@ std::vector<Vec2> rect(double x0, double y0, double x1, double y1) {
     return {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
 }
 
-// --- 1. tangency and self-coverage -------------------------------------------------
 void testSelfCoverage() {
     std::printf("[selftest] corner self-coverage and tangency\n");
     Domain dom;
@@ -50,21 +41,17 @@ void testSelfCoverage() {
     VisWorkspace ws;
     ws.init(dom.numEdges(), vp.num_bins);
 
-    // Antenna at vertex 0 of the rectangle.  Its two incident walls are 10 and 20 long,
-    // so exactly (10+20)/60 = 0.5 of the perimeter must come back visible.
     std::vector<VisArc> arcs;
     eng.computeArcs(0, 0.0, ws, arcs);
     const double vis = visibleLengthOn(dom, arcs, 0);
     check(std::fabs(vis - 30.0) < 1e-9, "corner antenna sees both incident walls in full");
     check(std::fabs(dom.perimeter(0) - 60.0) < 1e-12, "perimeter is 60");
 
-    // Mid-wall antenna sees its own wall entirely but neither neighbour wall.
     arcs.clear();
     eng.computeArcs(0, 0.5, ws, arcs);
     const double vis_mid = visibleLengthOn(dom, arcs, 0);
     check(std::fabs(vis_mid - 10.0) < 1e-9, "mid-wall antenna sees exactly its own wall");
 
-    // Strict mode is the hedge: contact with the boundary blocks, so self-coverage goes.
     VisibilityParams strict;
     strict.boundary_blocks = true;
     VisibilityEngine eng_s(dom, strict);
@@ -73,10 +60,8 @@ void testSelfCoverage() {
     check(visibleLengthOn(dom, arcs, 0) < 1e-9, "strict mode removes self-coverage");
 }
 
-// --- 2. occlusion between two buildings --------------------------------------------
 void testOcclusion() {
     std::printf("[selftest] occlusion by a neighbouring block\n");
-    // A viewer on the left building, a tall wall in the middle, a target on the right.
     Domain dom;
     dom.buildFromPolygons({rect(0, 0, 10, 10), rect(20, -50, 30, 50), rect(40, 0, 50, 10)});
     dom.buildGrid(8.0);
@@ -87,19 +72,12 @@ void testOcclusion() {
     ws.init(dom.numEdges(), vp.num_bins);
 
     std::vector<VisArc> arcs;
-    eng.computeArcs(1, 0.0, ws, arcs);  // vertex (10,0) of the left building
+    eng.computeArcs(1, 0.0, ws, arcs);
     check(visibleLengthOn(dom, arcs, 2) < 1e-9,
           "far building fully hidden behind the middle wall");
     check(visibleLengthOn(dom, arcs, 1) > 1e-9, "middle wall itself is visible");
 }
 
-// --- 3. randomised comparison against brute force ----------------------------------
-//
-// `spread` controls how far the buildings are scattered.  The wide setting matters: it
-// forces the shell expansion and the depth-buffer prune to do real work, whereas a
-// compact scene fits inside the first shell and exercises neither.  A bug that let the
-// engine trust edges lying outside the radius its occluders were gathered from was
-// invisible until this ran at 900 m.
 void testRandomAgainstBruteForce(double spread, int n_scenes, int max_buildings,
                                  const char* label) {
     std::printf("[selftest] randomised scenes vs brute force (%s)\n", label);
@@ -111,8 +89,6 @@ void testRandomAgainstBruteForce(double spread, int n_scenes, int max_buildings,
     int compared = 0, mismatches = 0;
 
     for (int scene = 0; scene < n_scenes; ++scene) {
-        // Axis-aligned and rotated boxes, rejected when they overlap an existing one so
-        // the footprints stay disjoint simple polygons as the contest guarantees.
         std::vector<std::vector<Vec2>> polys;
         std::vector<std::array<double, 4>> boxes;
         for (int attempt = 0; attempt < 4000 && int(polys.size()) < max_buildings; ++attempt) {
@@ -164,7 +140,6 @@ void testRandomAgainstBruteForce(double spread, int n_scenes, int max_buildings,
             Vec2 wa, wb;
             wedgeAt(dom, host, at_vertex, c, wa, wb);
 
-            // Interval lookup per target edge.
             for (uint32_t te = 0; te < dom.numEdges(); ++te) {
                 std::vector<std::pair<double, double>> iv;
                 for (const VisArc& a : arcs)
@@ -187,8 +162,6 @@ void testRandomAgainstBruteForce(double spread, int n_scenes, int max_buildings,
                             margin = std::min(margin, std::min(std::fabs(s - r.first),
                                                                std::fabs(s - r.second)));
                     ++compared;
-                    // Disagreements are only tolerated within a hair of an arc endpoint,
-                    // where the sample point itself is geometrically ambiguous.
                     if (bf != eng_says && margin > 1e-9) {
                         ++mismatches;
                         if (mismatches <= 6) {
@@ -213,11 +186,8 @@ void testRandomAgainstBruteForce(double spread, int n_scenes, int max_buildings,
     check(mismatches == 0, "engine matches brute force on random scenes");
 }
 
-}  // namespace
+}
 
-// Cross-checks the engine against the O(edges) reference on a real dataset.  The
-// synthetic scenes cannot reproduce the configurations a real city produces -- shared
-// walls, courtyards, deeply non-convex footprints -- so this is the test that matters.
 int runDataCheck(const std::string& path, int n_candidates, double target_radius,
                  unsigned seed, bool uncapped) {
     Domain dom;
@@ -227,8 +197,6 @@ int runDataCheck(const std::string& path, int n_candidates, double target_radius
 
     VisibilityParams vp;
     vp.min_arc_len = 0.0;
-    // `uncapped` reproduces exactly what the final evaluator does: no working radius, so
-    // the engine takes the whole-scene path instead of expanding shells.
     vp.max_radius = uncapped ? dom.diagonal() * 1.001 : target_radius * 2.0;
     VisibilityEngine eng(dom, vp);
     std::printf("[datacheck] max_radius=%.1f target_radius=%.1f\n", vp.max_radius,
@@ -255,8 +223,6 @@ int runDataCheck(const std::string& path, int n_candidates, double target_radius
         Vec2 wa, wb;
         wedgeAt(dom, host, at_vertex, c, wa, wb);
 
-        // Only edges near the viewer are sampled, but every edge in the dataset acts as
-        // a potential blocker in the reference test.
         GridScratch gs;
         gs.reset(dom.numEdges());
         gs.nextEpoch();
@@ -320,4 +286,4 @@ int runSelfTest() {
     return g_failures == 0 ? 0 : 1;
 }
 
-}  // namespace gis
+}

@@ -1,4 +1,3 @@
-// refine.cpp -- coordinate ascent over the continuous boundary, scored exactly.
 #include "refine.hpp"
 
 #include <algorithm>
@@ -33,20 +32,16 @@ double nowSec() {
     return std::chrono::duration<double>(clock::now() - t0).count();
 }
 
-// A covered stretch of one building's perimeter, in arclength along that perimeter.
 struct Seg {
     double lo, hi;
     uint32_t ant;
 };
 
-// Arcs contributed by one antenna, grouped by building.
 struct Contribution {
-    std::vector<uint32_t> buildings;        // sorted, unique
-    std::vector<std::vector<Seg>> per_bld;  // parallel to `buildings`
+    std::vector<uint32_t> buildings;
+    std::vector<std::vector<Seg>> per_bld;
 };
 
-// Merge sorted disjoint `a` with arbitrary `b`, returning the total covered length.
-// `a` is already normalised; `b` is not, so it is sorted first by the caller.
 double unionLength(const std::vector<Seg>& a, const std::vector<Seg>& b) {
     size_t i = 0, j = 0;
     double total = 0.0, cur_lo = 0.0, cur_hi = 0.0;
@@ -78,7 +73,6 @@ double unionLength(const std::vector<Seg>& a, const std::vector<Seg>& b) {
     return total;
 }
 
-// Normalise a bag of segments into sorted disjoint form.
 void normalise(std::vector<Seg>& v) {
     if (v.empty()) return;
     std::sort(v.begin(), v.end(), [](const Seg& a, const Seg& b) { return a.lo < b.lo; });
@@ -93,7 +87,7 @@ void normalise(std::vector<Seg>& v) {
     v.resize(w + 1);
 }
 
-}  // namespace
+}
 
 int runRefine(const RefineOptions& o) {
     Domain dom;
@@ -117,8 +111,6 @@ int runRefine(const RefineOptions& o) {
     std::fprintf(stderr, "refine: %s  tau=%.17g k=%zu  (worst snap %.3e m)\n",
                  o.solution.c_str(), tau, k, worst_snap);
 
-    // Uncapped, exactly as the final evaluator runs: a refinement judged on capped
-    // sight-lines would optimise a different function from the one being scored.
     VisibilityParams vp;
     vp.num_bins = o.bins;
     vp.boundary_blocks = o.strict;
@@ -131,7 +123,6 @@ int runRefine(const RefineOptions& o) {
     for (uint32_t b = 0; b < nb; ++b) need[b] = tau * dom.scoringPerimeter(b);
     const double band = o.knife_eps * std::max(1.0, tau);
 
-    // ---- current state -------------------------------------------------------------
     auto contributionOf = [&](const Candidate& c, VisWorkspace& ws,
                               std::vector<VisArc>& arcs) {
         arcs.clear();
@@ -171,7 +162,6 @@ int runRefine(const RefineOptions& o) {
             contrib[size_t(i)] = contributionOf(cands[size_t(i)], ws, arcs);
     }
 
-    // Per building: every segment, tagged with the antenna that supplied it.
     std::vector<std::vector<Seg>> per_bld(nb);
     for (size_t i = 0; i < k; ++i)
         for (size_t z = 0; z < contrib[i].buildings.size(); ++z) {
@@ -201,18 +191,13 @@ int runRefine(const RefineOptions& o) {
     }
     std::fprintf(stderr, "  start: %u buildings serviced\n", score);
 
-    // ---- trial positions: tangency events on a host edge -----------------------------
-    // Sliding an antenna along edge e changes the combinatorial structure of what it sees
-    // only where it becomes collinear with two vertices, so those parameters are the ones
-    // worth testing.  Vertices are taken nearest-first and capped, which keeps the event
-    // set proportional to local complexity rather than to edge length.
     std::vector<double> tv;
     auto trialsFor = [&](const Candidate& cur, GridScratch& scratch,
                          std::vector<uint32_t>& edges, std::vector<Candidate>& out) {
         const uint32_t e = cur.edge;
         const double cur_t = cur.t;
         tv.clear();
-        tv.push_back(0.0);  // the vertex: widest aperture, and exact to write down
+        tv.push_back(0.0);
         if (cur_t != 0.0) tv.push_back(cur_t);
 
         const Vec2 A = dom.edgeA(e), B = dom.edgeB(e);
@@ -249,7 +234,6 @@ int runRefine(const RefineOptions& o) {
                              [](double x, double y) { return std::fabs(x - y) < 1e-9; }),
                  tv.end());
 
-        // Thin to the trial budget, keeping the spread rather than a prefix.
         const size_t want = size_t(std::max(1, o.trials));
         if (tv.size() > want) {
             std::vector<double> keep;
@@ -269,10 +253,6 @@ int runRefine(const RefineOptions& o) {
         out.reserve(tv.size() + size_t(std::max(0, o.relocate_edges)));
         for (double t : tv) out.push_back(Candidate{e, t});
 
-        // The across-edge half: the nearest start vertices to where this antenna actually
-        // stands, which is not the same as the nearest to its host edge's midpoint on a
-        // long edge.  Excluding the host edge itself keeps this set disjoint from the
-        // events above.
         if (o.relocate_edges > 0) {
             const Vec2 here = candidateLocalPos(dom, cur);
             edges.clear();
@@ -291,14 +271,13 @@ int runRefine(const RefineOptions& o) {
         }
     };
 
-    // ---- coordinate ascent -----------------------------------------------------------
     double t_end = (o.time_budget_sec > 0.0) ? nowSec() + o.time_budget_sec : 1e18;
     if (o.deadline_epoch > 0.0) {
         const double left = o.deadline_epoch - unixNow() - 30.0;
         t_end = std::min(t_end, nowSec() + std::max(0.0, left));
     }
 
-    std::vector<std::vector<Seg>> rest_cache;   // merged union excluding antenna i
+    std::vector<std::vector<Seg>> rest_cache;
     std::unordered_map<uint32_t, size_t> rest_of;
     std::vector<Candidate> ts;
     std::vector<Contribution> trial_contrib;
@@ -330,8 +309,6 @@ int runRefine(const RefineOptions& o) {
                     trial_contrib[size_t(z)] = contributionOf(ts[size_t(z)], ws, arcs);
             }
 
-            // Everything this antenna currently touches, with its own contribution taken
-            // out, so a trial can be scored by merging against it.
             rest_of.clear();
             rest_cache.clear();
             auto restFor = [&](uint32_t b) -> const std::vector<Seg>& {
@@ -357,12 +334,9 @@ int runRefine(const RefineOptions& o) {
                 int dscore = 0;
                 double dlen = 0.0;
 
-                // Buildings the move can affect: those it touches now, plus those the
-                // trial would touch.
                 for (size_t q = 0; q < contrib[i].buildings.size(); ++q) {
                     const uint32_t b = contrib[i].buildings[q];
                     const std::vector<Seg>& rest = restFor(b);
-                    // Does the trial also land on b?  Both lists are sorted by building.
                     const auto& tb = trial_contrib[z].buildings;
                     const auto pos = std::lower_bound(tb.begin(), tb.end(), b);
                     double L;
@@ -378,7 +352,6 @@ int runRefine(const RefineOptions& o) {
                     dscore += int(sv) - int(serviced[b]);
                     dlen += L - cur_len[b];
                 }
-                // Buildings only the trial reaches.
                 for (size_t q = 0; q < trial_contrib[z].buildings.size(); ++q) {
                     const uint32_t b = trial_contrib[z].buildings[q];
                     const auto& ob = contrib[i].buildings;
@@ -392,9 +365,6 @@ int runRefine(const RefineOptions& o) {
                     dlen += L - cur_len[b];
                 }
 
-                // Score first; covered length only as a tie-break, so the walk still has a
-                // direction on the plateaus that dominate this problem.  Both are
-                // non-decreasing, which is what makes the ascent terminate.
                 if (dscore > best_dscore || (dscore == best_dscore && dscore >= 0 &&
                                              dlen > best_dlen + 1e-9)) {
                     best_dscore = dscore;
@@ -405,7 +375,6 @@ int runRefine(const RefineOptions& o) {
 
             if (best_z < 0 || (best_dscore == 0 && best_dlen <= 1e-6)) continue;
 
-            // ---- apply -------------------------------------------------------------
             for (size_t q = 0; q < contrib[i].buildings.size(); ++q) {
                 const uint32_t b = contrib[i].buildings[q];
                 auto& v = per_bld[b];
@@ -423,8 +392,6 @@ int runRefine(const RefineOptions& o) {
                 }
             }
 
-            // Refresh the affected buildings from scratch: cheap, and it keeps `cur_len`
-            // and `serviced` exact rather than accumulated from deltas.
             std::vector<uint32_t> touched;
             for (auto& kv : rest_of) touched.push_back(kv.first);
             for (const uint32_t b : contrib[i].buildings) touched.push_back(b);
@@ -454,9 +421,6 @@ int runRefine(const RefineOptions& o) {
     }
     if (out_of_time) std::fprintf(stderr, "  stopped on the time budget\n");
 
-    // ---- write out, scored by the authoritative evaluator ----------------------------
-    // The incremental bookkeeping above is only trusted to steer; what gets written is
-    // whatever evaluateExact says, so the answer file cannot disagree with the scorer.
     EvalParams ep;
     ep.tau = tau;
     ep.max_radius = o.eval_max_radius;
@@ -489,4 +453,4 @@ int runRefine(const RefineOptions& o) {
     return 0;
 }
 
-}  // namespace gis
+}

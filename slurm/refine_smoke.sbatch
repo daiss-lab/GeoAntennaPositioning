@@ -1,12 +1,4 @@
 #!/bin/bash
-# One small refinement, to prove the module runs at all before spending a full array on it.
-#
-# tau=0.75 k=50 is the cheapest cell in the grid: fewest antennas, and the baseline answer
-# from Solution02's bench run (job 993563) is the one with the most headroom left, so if
-# refinement can move anything it should move something here.
-#
-#   sbatch slurm/refine_smoke.sbatch
-#
 #SBATCH --job-name=giscup-refsmoke
 #SBATCH --partition=batch
 #SBATCH --nodes=1

@@ -7,7 +7,6 @@
 namespace gis {
 namespace {
 
-// Is p strictly between the endpoints of the open segment (a,b), and on it?
 bool strictlyInsideOpenSegment(const Vec2& p, const Vec2& a, const Vec2& b) {
     if (orient(a, b, p) != 0) return false;
     const Vec2 ab = b - a;
@@ -15,7 +14,6 @@ bool strictlyInsideOpenSegment(const Vec2& p, const Vec2& a, const Vec2& b) {
     return d > 0.0 && d < ab.norm2();
 }
 
-// Collinear overlap of positive length between segments (c,x) and (a,b)?
 bool collinearOverlap(const Vec2& c, const Vec2& x, const Vec2& a, const Vec2& b) {
     if (orient(c, x, a) != 0 || orient(c, x, b) != 0) return false;
     const Vec2 d = x - c;
@@ -27,12 +25,6 @@ bool collinearOverlap(const Vec2& c, const Vec2& x, const Vec2& a, const Vec2& b
     return std::min(tb, 1.0) - std::max(ta, 0.0) > 0.0;
 }
 
-// Does edge [a,b] block the sight-line from c to x?
-//
-// Default (Definition 1): only a transversal crossing blocks, so running along a wall
-// or grazing a corner stays visible.  Strict mode additionally blocks on any contact
-// strictly between the endpoints, for measuring the downside if the evaluator reads
-// visibility that way.
 inline bool blocks(const Vec2& c, const Vec2& x, const Vec2& a, const Vec2& b, bool strict) {
     if (properCross(c, x, a, b)) return true;
     if (!strict) return false;
@@ -42,19 +34,16 @@ inline bool blocks(const Vec2& c, const Vec2& x, const Vec2& a, const Vec2& b, b
     return false;
 }
 
-// Parameter along the target where the ray c->(c+d) meets the target's line, or NaN.
 inline double rayHitParam(const Vec2& c, const Vec2& P, const Vec2& QP, const Vec2& d) {
     const double denom = cross(d, QP);
     if (denom == 0.0) return std::nan("");
     const double s = -cross(d, P - c) / denom;
     if (!(s > 0.0 && s < 1.0)) return std::nan("");
     const Vec2 x = P + QP * s;
-    if (dot(x - c, d) <= 0.0) return std::nan("");  // behind the viewer
+    if (dot(x - c, d) <= 0.0) return std::nan("");
     return s;
 }
 
-// Shared driver: split [0,1] at the supplied breakpoints and keep the sub-intervals
-// whose midpoint tests positive.  At most three intervals result, so this stays O(1).
 template <typename Test>
 inline void accumulateShadow(const Vec2& P, const Vec2& QP, double b0, double b1,
                              Test&& hidden, std::vector<std::pair<double, double>>& out) {
@@ -70,20 +59,16 @@ inline void accumulateShadow(const Vec2& P, const Vec2& QP, double b0, double b1
     }
 }
 
-}  // namespace
+}
 
 bool insideWedge(const Vec2& a, const Vec2& b, const Vec2& d) {
     const int sab = crossSign(a, b);
     if (sab > 0) {
-        // Wedge spans less than pi.
         return crossSign(a, d) > 0 && crossSign(d, b) > 0;
     }
     if (sab < 0) {
-        // Wedge spans more than pi: it is the complement of the closed wedge b -> a.
         return !(crossSign(b, d) >= 0 && crossSign(d, a) >= 0);
     }
-    // Collinear bounds: opposite directions mean a half-plane, same direction means
-    // a degenerate (empty) wedge.
     if (dot(a, b) < 0.0) return crossSign(a, d) > 0;
     return false;
 }
@@ -91,7 +76,7 @@ bool insideWedge(const Vec2& a, const Vec2& b, const Vec2& d) {
 void wedgeAt(const Domain& dom, uint32_t host_edge, bool at_vertex, const Vec2& c,
              Vec2& a, Vec2& b) {
     if (at_vertex) {
-        const uint32_t v = host_edge;  // edge index equals its start-vertex index
+        const uint32_t v = host_edge;
         a = dom.pt(dom.nextVert(v)) - c;
         b = dom.pt(dom.prevVert(v)) - c;
     } else {
@@ -147,8 +132,6 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
     std::fill(ws.bin_depth.begin(), ws.bin_depth.end(),
               std::numeric_limits<float>::infinity());
 
-    // Records that every direction in [lo, lo+span] is occluded from `depth` onward.
-    // Only bins wholly inside the span are updated, which keeps the buffer sound.
     auto addDepth = [&](double lo, double span, double depth) {
         const int k0 = int(std::ceil(lo * inv_binw));
         const int k1 = int(std::floor((lo + span) * inv_binw));
@@ -158,7 +141,6 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
         }
     };
 
-    // Adds an occluded angular span, splitting it where it wraps past 2*pi.
     auto addHorizon = [&](double lo, double span) {
         if (span <= 0.0) return;
         const double hi = lo + span;
@@ -170,7 +152,6 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
         }
     };
 
-    // Directions leading straight into the host building are opaque by construction.
     addDepth(normAngle(angleOf(wedge_a)), ccwSpan(angleOf(wedge_a), angleOf(wedge_b)), 0.0);
 
     auto ingest = [&](size_t from) {
@@ -187,8 +168,6 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
                 lo = normAngle(angleOf(db));
                 hi = normAngle(angleOf(da));
             } else {
-                // Zero angular width as seen from c: the sight-line would run along the
-                // edge, which is tangent and therefore never blocks (Definition 1).
                 lo = normAngle(angleOf(da));
                 hi = lo;
             }
@@ -198,21 +177,13 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
             ws.near_dist.push_back(
                 float(std::sqrt(segPointDist2(dom_.edgeA(e), dom_.edgeB(e), c, &tmp))));
             ws.far_dist.push_back(float(std::max(da.norm(), db.norm())));
-            // In strict mode even a collinear edge occludes, so keep it as a blocker.
             const bool is_blocker = (s != 0) || p_.boundary_blocks;
             ws.blocks.push_back(is_blocker ? 1 : 0);
             if (!is_blocker || e == host_edge) continue;
-            // Past the wall's far end the direction is certainly occluded.
             addDepth(lo, ccwSpan(lo, hi), std::max(da.norm(), db.norm()));
         }
     };
 
-    // True once the occluded spans cover every direction, counting only walls that lie
-    // *wholly* within `radius`.  This restriction is essential: cell queries return a
-    // square superset, and a wall straddling the shell boundary occludes only beyond its
-    // own far end, so letting it close the horizon would wrongly condemn everything past
-    // `radius`.  An exact interval union is used rather than angular bins because a
-    // distant wall can subtend far less than one bin and still be what seals a street.
     auto horizonClosed = [&](double radius) {
         ws.horizon.clear();
         {
@@ -241,7 +212,6 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
         const size_t before = ws.edges.size();
         if (radius >= cap) {
             if (dom_.radiusExceedsGrid(cap)) {
-                // The whole scene is cheaper to take wholesale; then nothing is missing.
                 dom_.appendAllEdges(ws.grid, ws.edges);
                 ws.valid_radius = std::numeric_limits<double>::infinity();
             } else {
@@ -253,8 +223,6 @@ void VisibilityEngine::collectEdges(const Vec2& c, uint32_t host_edge, const Vec
         }
         dom_.queryRadius(c, radius, ws.grid, ws.edges);
         ingest(before);
-        // Everything is occluded by geometry within `radius`, so nothing beyond it can
-        // be visible and the expansion stops here with an exact answer.
         if (horizonClosed(radius)) {
             ws.valid_radius = radius;
             return;
@@ -273,8 +241,6 @@ void VisibilityEngine::computeArcs(uint32_t host_edge, double t, VisWorkspace& w
 
 void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_vertex,
                                      VisWorkspace& ws, std::vector<VisArc>& out) const {
-    // Interior wedge at c: the counter-clockwise sweep from `wedge_a` to `wedge_b`.
-    // Rings are stored counter-clockwise, so the interior is on the left of each edge.
     Vec2 wedge_a, wedge_b;
     wedgeAt(dom_, host_edge, at_vertex, c, wedge_a, wedge_b);
 
@@ -284,8 +250,6 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
     const double inv_binw = nb / kTwoPi;
     const size_t m = ws.edges.size();
 
-    // Bucket blockers by angle so each target only consults the ones that could
-    // possibly shadow it.
     std::fill(ws.bin_start.begin(), ws.bin_start.end(), 0);
     auto forEachOverlapBin = [&](double lo, double hi, auto&& fn) {
         const double span = ccwSpan(lo, hi);
@@ -318,14 +282,6 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
     for (size_t ti = 0; ti < m; ++ti) {
         const uint32_t te = ws.edges[ti];
 
-        // Early reject: if every direction this edge spans is already occluded closer
-        // than the edge itself, none of it can be visible.  In a dense scene this
-        // discards the large majority of collected edges for the cost of a few
-        // comparisons, which is what keeps the cost proportional to what is *seen*
-        // rather than to what is nearby.
-        // Beyond the radius where the collected set is complete we have no reliable
-        // occluder information, and the horizon closed there anyway, so nothing further
-        // out can be seen.
         if (double(ws.near_dist[ti]) > ws.valid_radius) continue;
 
         {
@@ -348,10 +304,6 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
 
         ws.shadows.clear();
 
-        // 0. Clip to the radius the collected set is complete out to.  A long wall can
-        // start inside the shell and run far past it, and out there we have no occluder
-        // information -- but the horizon closed at this radius, so nothing beyond it is
-        // visible anyway and treating the overhang as shadowed is exact.
         if (std::isfinite(ws.valid_radius)) {
             const Vec2 f = P - c;
             const double qa = QP.norm2();
@@ -371,7 +323,6 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
             }
         }
 
-        // 1. The host building's own interior.
         accumulateShadow(P, QP, rayHitParam(c, P, QP, wedge_a),
                          rayHitParam(c, P, QP, wedge_b),
                          [&](const Vec2& x) {
@@ -381,14 +332,10 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
                          },
                          ws.shadows);
 
-        // 2. Occluding walls, restricted to the bins this target spans.
         ++ws.seen_epoch;
         auto consider = [&](int k) {
             for (uint32_t j = ws.bin_start[k]; j < ws.bin_start[k + 1]; ++j) {
                 const uint32_t bi = ws.bin_items[j];
-                // An edge never occludes itself under Definition 1 (the sight-line only
-                // touches it).  In strict mode it must, so that a line running along a
-                // wall counts as blocked.
                 if (bi == ti && !strict) continue;
                 const uint32_t be = ws.edges[bi];
                 if (ws.seen_stamp[be] == ws.seen_epoch) continue;
@@ -409,8 +356,6 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
             const Vec2 da = P - c, db = Q - c;
             const int s = crossSign(da, db);
             if (s == 0) {
-                // Target collinear with the viewer: consult both endpoint directions,
-                // which differ when the viewer stands between them.
                 consider(int(normAngle(angleOf(da)) * inv_binw) % nb);
                 consider(int(normAngle(angleOf(db)) * inv_binw) % nb);
             } else {
@@ -420,7 +365,6 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
             }
         }
 
-        // 3. Complement of the union of shadows gives the visible fragments.
         if (ws.shadows.empty()) {
             if (dom_.edgeLen(te) >= p_.min_arc_len) out.push_back({te, 0.0, 1.0});
             continue;
@@ -439,4 +383,4 @@ void VisibilityEngine::computeArcsAt(const Vec2& c, uint32_t host_edge, bool at_
     }
 }
 
-}  // namespace gis
+}

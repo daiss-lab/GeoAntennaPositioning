@@ -1,13 +1,4 @@
 #!/bin/bash
-# Does the measured margin land where the fixed-margin sweep says it should?
-#
-# What this has to show is that `--slot-margin -1` comes out near zero at tau = 0.25 and
-# tau = 0.75, where the slot model and the exact evaluator already agree, and comes out
-# clearly positive at tau = 0.5, where they do not.  A calibration that reports the same
-# number everywhere is measuring nothing.
-#
-#   sbatch slurm/calib_smoke.sbatch
-#
 #SBATCH --job-name=gis4-csmoke
 #SBATCH --partition=debug
 #SBATCH --nodes=1

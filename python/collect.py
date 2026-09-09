@@ -1,32 +1,11 @@
 #!/usr/bin/env python3
-"""Collect exact scores out of a results directory and tabulate them.
-
-Every number reported anywhere in Solution04 comes from `gis_cup score` reading an emitted
-answer file, never from a solver reporting on its own run.  This script reads those files
-and nothing else: the claim line of an answer file is the serviced-building list that the
-independent scorer confirmed, so its length is the score.
-
-Filenames carry the configuration.  `--pattern` is a regex whose *named groups* become the
-columns, so a sweep only has to name its files sensibly to be tabulated:
-
-    python3 python/collect.py results/fact \\
-        --pattern 't(?P<target>\\d)_m(?P<margin>[\\d.]+)_s(?P<seed>\\d+)_tau(?P<tau>[\\d.]+)_k(?P<k>\\d+)' \\
-        --rows target,margin --cols tau,k --pair seed
-"""
 import argparse
 import collections
 import os
 import re
 import sys
 
-
 def score_of(path):
-    """Buildings serviced, read from the answer file's claim line.
-
-    Three lines: the (tau, k) header, the coordinates, and the ids claimed.  A file that is
-    mid-checkpoint or truncated is reported as missing rather than as a zero, because a
-    silent zero in a mean is far more damaging than a gap.
-    """
     try:
         with open(path) as fh:
             lines = fh.read().splitlines()
@@ -38,7 +17,6 @@ def score_of(path):
     if not claim:
         return 0
     return len(claim.split(','))
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -55,7 +33,6 @@ def main():
     rows = [c for c in args.rows.split(',') if c]
     cols = [c for c in args.cols.split(',') if c]
 
-    # (row_key, col_key, pair_key) -> score
     data = {}
     pair_vals, row_vals, col_vals = set(), set(), set()
     for d in args.dirs:
@@ -117,7 +94,6 @@ def main():
         line = ['/'.join(rk)] + cells + ['%.1f' % tot, '%d' % n]
         print('  '.join(v.ljust(w) for v, w in zip(line, widths)))
 
-    # Against the first row, which is the control by convention.
     if len(row_list) > 1:
         base = row_list[0]
         print('\ndelta vs %s (sum over cells, then the per-cell sign count):' % ('/'.join(base) or 'row 0'))
@@ -138,7 +114,6 @@ def main():
             print('  %-24s %+8.1f   paired: %d win / %d loss / %d tie' %
                   ('/'.join(rk), totals[rk] - totals[base], wins, losses, ties))
     return 0
-
 
 if __name__ == '__main__':
     sys.exit(main())

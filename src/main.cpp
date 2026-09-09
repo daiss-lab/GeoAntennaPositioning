@@ -1,4 +1,3 @@
-// main.cpp -- command line entry point.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -243,7 +242,7 @@ int cmdPrecompute(const Args& a) {
     return 0;
 }
 
-}  // namespace
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {

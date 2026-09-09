@@ -1,9 +1,4 @@
 #!/bin/bash
-# Fast confidence check that the Solution04 build, the inherited caches and the scoring
-# path all still work before anything large is submitted.  Runs on the debug partition.
-#
-#   sbatch slurm/smoke4.sbatch
-#
 #SBATCH --job-name=gis4-smoke
 #SBATCH --partition=debug
 #SBATCH --nodes=1

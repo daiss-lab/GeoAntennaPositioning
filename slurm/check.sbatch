@@ -1,7 +1,4 @@
 #!/bin/bash
-# End-to-end check: rebuild the visibility cache, solve one sub-problem, then verify the
-# answer with the independent sampling checker.
-#
 #SBATCH --job-name=giscup-chk
 #SBATCH --partition=batch
 #SBATCH --nodes=1

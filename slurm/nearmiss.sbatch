@@ -1,18 +1,4 @@
 #!/bin/bash
-# Where is the reachable headroom?
-#
-# An upper bound on the optimum would answer this, but every cheap bound available here is
-# loose enough to be uninformative -- the submodular guarantee is on Phi, and Phi counts
-# partial progress, so it sits far above the score it is supposed to bound.
-#
-# This measures the same thing from below and exactly.  For each of the nine incumbent
-# answers, dump every building's true coverage ratio and count how many sit just short of
-# tau.  A building at 0.97*tau is one small move from a point; a building at 0.3*tau is
-# not.  The size of that near-miss population is the honest ceiling on what any amount of
-# extra local search can buy, and its shape says which cells deserve the compute.
-#
-#   sbatch slurm/nearmiss.sbatch
-#
 #SBATCH --job-name=gis4-near
 #SBATCH --partition=batch
 #SBATCH --nodes=1

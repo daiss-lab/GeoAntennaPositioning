@@ -1,18 +1,4 @@
 #!/bin/bash
-# Does continuous refinement buy anything over Solution02's 4 m candidate grid?
-#
-# The baseline is Solution02's bench run (job 993563, 16 replicas x 600 s): its `new_far`
-# answers, which were the best of the four arms in eight of nine cells.  Refining the
-# *winner* is the honest test -- refining a weak answer would measure how much slack the
-# baseline left, not what the continuum is worth.
-#
-# Both the input and the output are re-scored here by `score`, the same third-party reader
-# used throughout, so the before/after pair comes from one evaluator and neither solver
-# marks its own work.  The refined answer is written to a separate file; the baseline in
-# ../Solution02 is never touched.
-#
-#   sbatch slurm/refine.sbatch
-#
 #SBATCH --job-name=giscup-refine
 #SBATCH --partition=batch
 #SBATCH --array=0-8

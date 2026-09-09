@@ -1,4 +1,3 @@
-// score_cmd.cpp -- read an emitted solution file back and score it exactly.
 #include "score_cmd.hpp"
 
 #include <algorithm>
@@ -19,9 +18,6 @@
 
 namespace gis {
 
-// Reads the three-line answer format.  Deliberately forgiving about whitespace and about
-// a missing third line, because the point of this command is to check what a stranger
-// parsing the file would see.
 ParsedSolution parseSolutionFile(const std::string& path) {
     std::ifstream fh(path);
     if (!fh) throw std::runtime_error("cannot open " + path);
@@ -29,7 +25,6 @@ ParsedSolution parseSolutionFile(const std::string& path) {
     std::vector<std::string> lines;
     std::string line;
     while (std::getline(fh, line)) {
-        // Trim; blank lines carry no content in this format.
         size_t a = line.find_first_not_of(" \t\r\n");
         if (a == std::string::npos) continue;
         size_t b = line.find_last_not_of(" \t\r\n");
@@ -47,7 +42,6 @@ ParsedSolution parseSolutionFile(const std::string& path) {
     }
 
     {
-        // "(x,y),(x,y),..." -- pull out every parenthesised pair.
         const std::string& s = lines[1];
         size_t i = 0;
         while (true) {
@@ -100,8 +94,6 @@ int runScore(const ScoreOptions& o) {
         cands.push_back(snapToBoundary(dom, a, &d));
         worst_snap = std::max(worst_snap, d);
     }
-    // A submitted point that is not on a boundary is an invalid answer, not a rounding
-    // detail, so this is reported prominently rather than folded into the score.
     std::printf("worst distance from a boundary: %.3e m%s\n", worst_snap,
                 worst_snap > 1e-6 ? "   <-- OFF THE BOUNDARY" : "");
 
@@ -117,9 +109,6 @@ int runScore(const ScoreOptions& o) {
     ep.claim_band = o.claim_band;
     ep.claim_all = o.claim_all;
 
-    // Per-antenna narration for one building.  When this evaluator and the independent
-    // sampler disagree about a building, the disagreement is always about a specific
-    // sight-line, and this is what names it.
     if (o.explain_building_id >= 0) {
         bool found = false;
         for (uint32_t b = 0; b < dom.numBuildings(); ++b)
@@ -141,16 +130,10 @@ int runScore(const ScoreOptions& o) {
     std::printf("\nre-scored at tau=%.17g: %zu buildings serviced (safe %u, on-threshold %u)\n",
                 tau, res.serviced.size(), res.n_safe, res.n_knife);
 
-    // One machine-readable line, so a shell script never has to select an answer by
-    // counting its claim line.  Since claims may deliberately exceed `serviced`, the claim
-    // count is not the score and picking on it would prefer the widest band over the best
-    // placement.  Scripts parse this.
     std::printf("SCORE tau=%.17g k=%u serviced=%zu safe=%u knife=%u claims=%zu\n", tau,
                 unsigned(sol.antennas.size()), res.serviced.size(), res.n_safe, res.n_knife,
                 res.claims.size());
 
-    // Compare against what the file claims.  A claim the recomputation does not support
-    // is worth nothing and, worse, is evidence of a bug somewhere.
     if (!sol.claimed.empty()) {
         std::vector<long long> recomputed;
         recomputed.reserve(res.serviced.size());
@@ -167,7 +150,6 @@ int runScore(const ScoreOptions& o) {
         std::printf("claim line: %zu claimed but not supported, %zu supported but not claimed\n",
                     over.size(), under.size());
         for (size_t i = 0; i < over.size() && i < 10; ++i) {
-            // Find the ratio so the size of the disagreement is visible, not just its count.
             double r = -1.0;
             for (uint32_t b = 0; b < dom.numBuildings(); ++b)
                 if (dom.buildingId(b) == over[i]) {
@@ -207,4 +189,4 @@ int runScore(const ScoreOptions& o) {
     return 0;
 }
 
-}  // namespace gis
+}

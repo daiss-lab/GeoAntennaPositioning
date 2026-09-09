@@ -20,7 +20,7 @@ void SlotLayout::build(const Domain& dom, double target_len, uint32_t min_slots,
         n = std::max(min_slots, std::min(max_slots, std::max<uint32_t>(n, 1)));
         slot_width[b] = float(perim / double(n));
         n_slots[b] = n;
-        acc += n + 1;  // trailing sentinel keeps runs from merging across buildings
+        acc += n + 1;
     }
     slot_offset[nb] = acc;
     total_slots = acc;
@@ -77,4 +77,4 @@ void arcsToRuns(const Domain& dom, const SlotLayout& layout, const std::vector<V
     out.push_back({start, prev - start + 1});
 }
 
-}  // namespace gis
+}

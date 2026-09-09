@@ -1,19 +1,7 @@
 #!/usr/bin/env python3
-"""
-split_submission.py -- cut a nine-block submission file into one file per sub-problem.
-
-    python3 split_submission.py submission.txt outdir/
-
-The official evaluator is single-threaded JavaScript and takes minutes to hours on a
-full cell, so the nine cells are evaluated as nine independent SLURM tasks.  Each output
-file is itself a valid one-block submission, which is exactly what the evaluator expects.
-
-Files are named `cell<NN>_tau<tau>_k<k>.txt` so the array index maps to a cell by sorting.
-"""
 
 import os
 import sys
-
 
 def main():
     if len(sys.argv) != 3:
@@ -48,7 +36,6 @@ def main():
     for path, tau, k, n_ant, n_claim in written:
         print("%s  tau=%s k=%s antennas=%d claims=%d" % (path, tau, k, n_ant, n_claim))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

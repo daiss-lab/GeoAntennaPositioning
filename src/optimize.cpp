@@ -28,8 +28,6 @@ double nowSec() {
 inline uint64_t maskFrom(uint32_t bit) { return ~0ULL << bit; }
 inline uint64_t maskTo(uint32_t bit) { return ~0ULL >> (63 - bit); }
 
-// xorshift64*, so a replica's whole random stream is one word that survives across
-// synchronisation rounds without carrying a std::mt19937_64 along with it.
 inline uint64_t nextRand(uint64_t& s) {
     s ^= s >> 12;
     s ^= s << 25;
@@ -43,7 +41,6 @@ inline double randUnit(uint64_t& s) {
     return double(nextRand(s) >> 11) * (1.0 / 9007199254740992.0);
 }
 inline uint64_t seedFrom(uint64_t x) {
-    // splitmix64, so that nearby seeds start far apart in the state space.
     x += 0x9E3779B97F4A7C15ULL;
     x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
     x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
@@ -51,16 +48,6 @@ inline uint64_t seedFrom(uint64_t x) {
     return x ? x : 0x9E3779B97F4A7C15ULL;
 }
 
-// ---- island migration over the shared filesystem --------------------------------------
-//
-// One file per island, rewritten in place at every synchronisation point.  Written to a
-// temporary name in the same directory and renamed, so a reader either sees the previous
-// generation whole or the new one whole, never a torn line -- which is the only guarantee
-// needed here, since an island that reads a stale elite has merely missed one round.
-
-// A selection only means anything to a reader solving the same sub-problem against the
-// same discretisation.  Every file carries this, and a mismatch is skipped rather than
-// adopted -- otherwise one mis-set share directory silently poisons nine runs at once.
 uint64_t shareSignature(double tau, uint32_t k, uint32_t n_cands, uint32_t n_slots) {
     uint64_t h = 1469598103934665603ULL;
     uint64_t t;
@@ -76,7 +63,7 @@ void publishElite(const std::string& dir, int island, uint64_t sig, const Soluti
     std::snprintf(path, sizeof(path), "%s/isl_%d.sol", dir.c_str(), island);
     std::snprintf(tmp, sizeof(tmp), "%s/isl_%d.sol.tmp", dir.c_str(), island);
     FILE* fh = std::fopen(tmp, "w");
-    if (!fh) return;  // a share directory that cannot be written is not fatal
+    if (!fh) return;
     std::fprintf(fh, "%llu %u %.17g %zu\n", (unsigned long long)sig, s.score, s.phi,
                  s.cand_idx.size());
     for (size_t i = 0; i < s.cand_idx.size(); ++i)
@@ -86,9 +73,6 @@ void publishElite(const std::string& dir, int island, uint64_t sig, const Soluti
     std::rename(tmp, path);
 }
 
-// Every island's published elite except our own.  Anything malformed, oversized, signed
-// for a different sub-problem or referring to a candidate index this process does not have
-// is dropped rather than trusted.
 std::vector<Solution> readForeignElites(const std::string& dir, int island, uint64_t sig,
                                         uint32_t n_cands, uint32_t k) {
     std::vector<Solution> out;
@@ -99,7 +83,7 @@ std::vector<Solution> readForeignElites(const std::string& dir, int island, uint
     while (const dirent* e = readdir(d)) {
         const std::string name = e->d_name;
         if (name.size() < 9 || name.compare(0, 4, "isl_") != 0) continue;
-        if (name.compare(name.size() - 4, 4, ".sol") != 0) continue;  // skips .sol.tmp
+        if (name.compare(name.size() - 4, 4, ".sol") != 0) continue;
         if (name == own) continue;
 
         FILE* fh = std::fopen((dir + "/" + name).c_str(), "r");
@@ -131,7 +115,7 @@ std::vector<Solution> readForeignElites(const std::string& dir, int island, uint
     return out;
 }
 
-}  // namespace
+}
 
 void SearchState::init(uint32_t n_buildings, uint32_t n_slots, uint32_t n_cands) {
     cov.assign(n_buildings, 0);
@@ -170,8 +154,6 @@ Optimizer::Optimizer(const Domain& dom, const SlotLayout& layout, const VisCache
 }
 
 void Optimizer::buildIndices() {
-    // candidate -> distinct buildings.  Runs never straddle a building (the slot layout
-    // leaves a sentinel between them), so one lookup per run suffices.
     cb_start_.assign(n_cands_ + 1, 0);
     std::vector<std::vector<uint32_t>> per_cand(n_cands_);
 
@@ -192,7 +174,6 @@ void Optimizer::buildIndices() {
     for (uint32_t ci = 0; ci < n_cands_; ++ci)
         std::copy(per_cand[ci].begin(), per_cand[ci].end(), cb_items_.begin() + cb_start_[ci]);
 
-    // building -> candidates, the transpose.
     std::vector<uint32_t> counts(n_buildings_ + 1, 0);
     for (uint32_t b : cb_items_) ++counts[b + 1];
     for (uint32_t b = 0; b < n_buildings_; ++b) counts[b + 1] += counts[b];
@@ -204,19 +185,12 @@ void Optimizer::buildIndices() {
         for (uint32_t j = cb_start_[ci]; j < cb_start_[ci + 1]; ++j)
             bc_items_[cursor[cb_items_[j]]++] = ci;
 
-    // How many of each building's slots each of its candidates covers.  Walking the runs
-    // once more is cheaper than carrying the counts through the transpose, and this is
-    // what lets the difficulty measurement rank a building's candidates without touching
-    // the run lists again.
     std::vector<uint32_t> where(bc_start_.begin(), bc_start_.end() - 1);
     for (uint32_t ci = 0; ci < n_cands_; ++ci) {
         uint32_t n;
         const Run* runs = cache_.runsOf(ci, n);
         for (uint32_t i = 0; i < n; ++i) {
             const uint32_t b = layout_.buildingOfSlot(runs[i].start);
-            // bc_items_ is grouped by building and, within a group, ascending in ci
-            // because the transpose was filled in candidate order -- so a linear cursor
-            // per building finds this candidate's entry without a search.
             uint32_t& j = where[b];
             while (j < bc_start_[b + 1] && bc_items_[j] != ci) ++j;
             if (j < bc_start_[b + 1]) bc_cnt_[j] += runs[i].len;
@@ -224,17 +198,6 @@ void Optimizer::buildIndices() {
     }
 }
 
-// m_b: how many antennas a greedy set-cover needs to carry building b over its threshold
-// using only that building's own candidates.  It is the natural per-building difficulty --
-// a corner that finishes a rectangle at tau = 0.5 gives m_b = 1, a building that needs
-// three separate sight-lines gives m_b = 3 -- and it is what the surrogate should be
-// dividing by, because Phi otherwise pays the same for a slot of progress on either.
-//
-// Only the `difficulty_width` candidates covering the most of b are considered.  Greedy
-// set-cover picks high-coverage sets first anyway, and the tail of a building's candidate
-// list is made of antennas that clip one corner of it.  m_b is therefore an upper bound on
-// what the restricted greedy would find, which is itself an upper bound on the optimum --
-// fine for a weight, and it never claims a building is easier than it is.
 double Optimizer::applyDifficulty(const OptimizeParams& p) {
     w_.assign(n_buildings_, 1.0);
     difficulty_.assign(n_buildings_, 0);
@@ -245,7 +208,7 @@ double Optimizer::applyDifficulty(const OptimizeParams& p) {
 
 #pragma omp parallel
     {
-        std::vector<std::pair<uint32_t, uint32_t>> ranked;  // (-covered, candidate)
+        std::vector<std::pair<uint32_t, uint32_t>> ranked;
         std::vector<uint64_t> got;
 #pragma omp for schedule(dynamic, 64)
         for (long long bb = 0; bb < (long long)n_buildings_; ++bb) {
@@ -285,7 +248,7 @@ double Optimizer::applyDifficulty(const OptimizeParams& p) {
                         best_at = r;
                     }
                 }
-                if (best_at == UINT32_MAX) break;  // nothing left adds anything
+                if (best_at == UINT32_MAX) break;
                 uint32_t nr;
                 const Run* runs = cache_.runsOf(ranked[best_at].second, nr);
                 for (uint32_t i = 0; i < nr; ++i) {
@@ -299,8 +262,6 @@ double Optimizer::applyDifficulty(const OptimizeParams& p) {
                 ranked[best_at].second = UINT32_MAX;
                 ++used;
             }
-            // Not reachable inside the width: treat as at least one worse than the worst
-            // that was, so the weighting still orders it last instead of tying.
             difficulty_[b] = uint16_t(have >= req_[b] ? used : used + 1);
         }
     }
@@ -331,8 +292,6 @@ double Optimizer::applyDifficulty(const OptimizeParams& p) {
             wsum += w_[b];
             ++wn;
         }
-        // Normalise to mean 1 over active buildings, so completion_weight, the plateau
-        // tolerance in lnsRound and the phi figures in the logs all keep their scale.
         if (wn > 0 && wsum > 0.0) {
             const double norm = double(wn) / wsum;
             for (uint32_t b = 0; b < n_buildings_; ++b)
@@ -345,8 +304,6 @@ double Optimizer::applyDifficulty(const OptimizeParams& p) {
 }
 
 void Optimizer::buildOwnIndex() {
-    // A candidate's *host* building -- the one it physically stands on, as opposed to the
-    // many it can see.  Pairs that finish a building come from this much smaller set.
     std::vector<uint32_t> counts(n_buildings_ + 1, 0);
     for (uint32_t ci = 0; ci < n_cands_; ++ci)
         ++counts[dom_.edgeBuilding(cache_.cands[ci].edge) + 1];
@@ -402,9 +359,6 @@ uint32_t Optimizer::setThreshold(double tau, double margin) {
         } else if (margin <= 0.0) {
             req_[b] = need;
         } else {
-            // Aim above tau, but never above what the geometry can actually supply --
-            // asking for the unreachable would make the building look permanently
-            // unfinished and the search would keep paying antennas into it.
             uint32_t want = layout_.required(b, tau * (1.0 + margin));
             if (want < need) want = need;
             if (want > reach) want = reach;
@@ -415,12 +369,6 @@ uint32_t Optimizer::setThreshold(double tau, double margin) {
     return excluded;
 }
 
-// Per building, a few pairs of antennas standing on its own boundary that between them
-// carry it over tau.  Section 3.2 of the overview is the reason this exists: at
-// tau = 0.75 no single antenna finishes any building, so a search that can only place one
-// antenna at a time sees zero score gain on every move it can make and is steered purely
-// by the partial-progress surrogate.  Offering the pair as one move puts the completion
-// back in view.
 void Optimizer::buildBundles(const OptimizeParams& p) {
     bundle_start_.assign(n_buildings_ + 1, 0);
     bundles_.clear();
@@ -436,9 +384,6 @@ void Optimizer::buildBundles(const OptimizeParams& p) {
         const uint32_t lo = own_start_[b], hi = own_start_[b + 1];
         if (hi - lo < 2) continue;
 
-        // Cap the working set: a long facade carries hundreds of candidates and the pair
-        // count is quadratic.  An even stride keeps corners and mid-wall points both
-        // represented, where a contiguous prefix would sample one wall and stop.
         std::vector<uint32_t> own;
         const uint32_t n_own = hi - lo;
         if (n_own <= p.bundle_own_cap) {
@@ -452,7 +397,6 @@ void Optimizer::buildBundles(const OptimizeParams& p) {
         const uint32_t n_slots = layout_.count(b);
         const uint32_t words = (n_slots + 63) / 64;
 
-        // One bitmap per own-candidate, over just this building's slots.
         std::vector<uint64_t> masks(size_t(own.size()) * words, 0ULL);
         std::vector<uint32_t> alone(own.size(), 0);
         for (size_t i = 0; i < own.size(); ++i) {
@@ -477,19 +421,16 @@ void Optimizer::buildBundles(const OptimizeParams& p) {
             alone[i] = c;
         }
 
-        // Only pairs that actually finish the building are worth carrying.  A pair that
-        // does not is just two ordinary candidates, which the search already considers
-        // one at a time and ranks better that way.
         struct Cand2 {
             uint32_t i, j, cover;
         };
         std::vector<Cand2> found;
         for (size_t i = 0; i < own.size(); ++i) {
-            if (alone[i] >= req) continue;  // a single already does it; no bundle needed
+            if (alone[i] >= req) continue;
             const uint64_t* mi = masks.data() + i * words;
             for (size_t j = i + 1; j < own.size(); ++j) {
                 if (alone[j] >= req) continue;
-                if (alone[i] + alone[j] < req) continue;  // unreachable even if disjoint
+                if (alone[i] + alone[j] < req) continue;
                 const uint64_t* mj = masks.data() + j * words;
                 uint32_t c = 0;
                 for (uint32_t w = 0; w < words; ++w)
@@ -502,9 +443,6 @@ void Optimizer::buildBundles(const OptimizeParams& p) {
         std::sort(found.begin(), found.end(),
                   [](const Cand2& a, const Cand2& c) { return a.cover > c.cover; });
 
-        // Keep a few, but not several spellings of the same pair: skip one when both its
-        // members are already spoken for, so the kept set offers the search genuinely
-        // different ways to finish this building rather than one way jittered.
         std::vector<uint8_t> used(own.size(), 0);
         std::vector<Bundle>& dst = per_b[b];
         for (const Cand2& c : found) {
@@ -551,8 +489,6 @@ void Optimizer::gain(SearchState& st, uint32_t ci, double* dphi, int* dscore) co
             st.touch_b.push_back(b);
             st.touch_d.push_back(add);
         } else {
-            // A candidate usually contributes only a couple of runs per building, so a
-            // short backwards scan beats maintaining an index.
             for (size_t j = st.touch_b.size(); j-- > 0;)
                 if (st.touch_b[j] == b) {
                     st.touch_d[j] += add;
@@ -575,9 +511,6 @@ void Optimizer::gain(SearchState& st, uint32_t ci, double* dphi, int* dscore) co
 
 void Optimizer::gainPair(SearchState& st, uint32_t c0, uint32_t c1, double* dphi,
                          int* dscore) const {
-    // Exact, by switching the first on and asking for the second's marginal gain against
-    // it.  The two overlap heavily by construction -- both stand on the same building --
-    // so adding their separate gains would badly overstate the pair.
     const double phi0 = st.phi;
     const uint32_t score0 = st.score;
     addCandidate(st, c0);
@@ -654,19 +587,12 @@ std::vector<double> Optimizer::slotRatios(const std::vector<uint32_t>& sel) cons
     return out;
 }
 
-// ---- phase 1: greedy -----------------------------------------------------------------
-//
-// Lazy greedy over two kinds of move: switch on one candidate, or switch on a pre-computed
-// pair that finishes a building.  Marginal gains of a submodular function only shrink as
-// the selection grows, so a stale queue entry is an upper bound: re-check it on pop rather
-// than rescoring every move at every step.  Moves are ranked by value *per antenna spent*,
-// which is what lets the two kinds compare on equal terms.
 void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
                        bool randomised) const {
     struct QEntry {
         double val;
-        uint32_t id;     // candidate index, or bundle index when `bundle` is set
-        uint32_t stamp;  // selection size the value was computed at; kBound = never
+        uint32_t id;
+        uint32_t stamp;
         bool bundle;
         bool operator<(const QEntry& o) const { return val < o.val; }
     };
@@ -684,11 +610,6 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
         if (dphi > 0.0 || ds > 0) pq.push({v, ci, 0, false});
     }
 
-    // Bundles enter on an optimistic bound rather than an exact value: the exact one costs
-    // a temporary insertion and removal, and there is no point paying that for the
-    // thousands that will never reach the front of the queue.  The bound is the two
-    // singles' values plus the one completion the pair exists to buy, halved because the
-    // move spends two antennas.  Whatever is popped is re-scored exactly before it is used.
     for (uint32_t bi = 0; bi < uint32_t(bundles_.size()); ++bi) {
         const Bundle& bu = bundles_[bi];
         const double bound =
@@ -700,19 +621,10 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
     std::vector<QEntry> choices;
 
     while (st.sel.size() < p.k && !pq.empty()) {
-        // Randomised replicas occasionally take one of the near-best moves instead of the
-        // best, which is what makes two replicas end up in different basins at all.
         const uint32_t width =
             (randomised && randUnit(rng) < p.grasp_prob) ? std::max(1u, p.grasp_width) : 1u;
 
         choices.clear();
-        // Work bound on lazy re-scoring, not a correctness device -- the fallback below
-        // guarantees progress if it runs out.  It has to be generous: after each placement
-        // every queue entry is stale, and the ones whose value actually dropped have to be
-        // demoted one at a time before the true leader surfaces.  Measured on tau=0.25,
-        // k=500, the greedy's slot-score against this bound is 7,372 at +64, 9,886 at
-        // +1,024 and 10,246 at +16,384, with +262,144 giving the same 10,246 -- so it
-        // saturates here, at a cost of 1.8 s against 1.0 s.
         int guard = int(4 * width) + 16384;
 
         while (choices.size() < width && !pq.empty() && guard-- > 0) {
@@ -740,8 +652,6 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
                     top.val = value(dphi, ds, p.completion_weight);
                 }
                 top.stamp = stamp;
-                // Re-scored downwards; if it no longer leads, it goes back and something
-                // else gets its turn.
                 if (!pq.empty() && top.val < pq.top().val) {
                     pq.push(top);
                     continue;
@@ -750,14 +660,6 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
             choices.push_back(top);
         }
 
-        // Running the guard out must not end the construction.  Lazy re-scoring churns
-        // whenever many stale entries still carry their initial, higher values: each pop
-        // re-scores downwards, fails to beat the queue top, and goes back, so `choices` can
-        // come back empty with the queue still full of perfectly good moves.  Breaking here
-        // abandons the greedy and hands the remaining budget to the top-up loop below,
-        // which fills it in candidate-index order -- on tau=0.25, k=500 that was the
-        // difference between an exact score of 959 and 10,323.  Take the queue leader
-        // outright instead, re-scored exactly, so every step places something deliberate.
         if (choices.empty()) {
             while (!pq.empty()) {
                 QEntry top = pq.top();
@@ -782,7 +684,6 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
             }
         }
 
-        // Only now is an empty shortlist genuine: the queue really is drained.
         if (choices.empty()) break;
         const size_t pick = randomised ? randBelow(rng, uint32_t(choices.size())) : 0;
         for (size_t i = 0; i < choices.size(); ++i)
@@ -805,9 +706,6 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
         ++stamp;
     }
 
-    // The queue only ever held moves with a positive gain at the time they were pushed, so
-    // it can empty before k antennas are placed.  Top up with anything unused: the answer
-    // must have exactly k, and an extra antenna can never reduce coverage.
     for (uint32_t ci = 0; ci < n_cands_ && st.sel.size() < p.k; ++ci) {
         if (st.chosen[ci]) continue;
         addCandidate(st, ci);
@@ -816,7 +714,6 @@ void Optimizer::greedy(const OptimizeParams& p, SearchState& st, uint64_t& rng,
     }
 }
 
-// ---- phase 2: large-neighbourhood search ---------------------------------------------
 long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution& best,
                               uint64_t& rng, double until) const {
     if (st.sel.empty()) return 0;
@@ -839,26 +736,11 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
                                     int(st.sel.size()));
         if (r <= 0) break;
 
-        // ---- destroy -------------------------------------------------------------
-        // Four shapes of hole, because they fail in different ways.  Scattered removals
-        // are usually put straight back; a spatially coherent hole lets the repair
-        // rearrange a whole neighbourhood; pulling out the antennas holding the fewest
-        // slots nobody else holds frees budget at almost no cost; and the fourth picks a
-        // building that is nearly finished and points the repair at it.
-        //
-        // That last one exists because of the shape of the objective.  The score is a step
-        // function, so every point available is sitting in a building a little short of
-        // tau -- and the other three shapes choose where to dig without reference to the
-        // score at all.  Only the repair's ranking ever notices a completion, and only if
-        // the right candidate happens to fall into its pool.
         removed.clear();
         uint32_t target_b = UINT32_MAX;
         const uint32_t mode = randBelow(rng, p.target_destroy ? 4u : 3u);
 
         if (mode == 3 && !active_.empty()) {
-            // The nearest miss among a sample, not the global nearest: sampling costs a
-            // fixed 64 lookups instead of a scan over every building, and the search
-            // revisits this thousands of times, so it sees the whole distribution anyway.
             uint32_t best_deficit = UINT32_MAX;
             for (uint32_t s = 0; s < p.target_sample; ++s) {
                 const uint32_t b = active_[randBelow(rng, uint32_t(active_.size()))];
@@ -879,10 +761,6 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
             std::partial_sort(keyed.begin(), keyed.begin() + r, keyed.end());
             for (int i = 0; i < r; ++i) removed.push_back(keyed[i].second);
         } else if ((mode == 2 || target_b != UINT32_MAX) && int(st.sel.size()) > r) {
-            // Sample a handful and drop the ones holding the fewest slots nobody else
-            // holds.  Sampling keeps this independent of k rather than linear in it.
-            // Mode 3 shares this: having chosen where the repair should spend, the budget
-            // for it should come from wherever it is cheapest, which is exactly here.
             const uint32_t n_sample = std::min<uint32_t>(24, uint32_t(st.sel.size()));
             keyed.clear();
             for (uint32_t i = 0; i < n_sample; ++i) {
@@ -924,10 +802,6 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
         }
         const int budget = int(removed.size());
 
-        // ---- repair --------------------------------------------------------------
-        // Pool: candidates touching a building the destroy left unsatisfied, plus a random
-        // sample so distant improvements stay reachable.  Capped, because a popular
-        // building can be visible from tens of thousands of candidates.
         pool.clear();
         disturbed.clear();
         ++st.touch_epoch;
@@ -951,12 +825,6 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
             pool.resize(p.pool_cap);
         }
 
-        // The targeted destroy is only worth anything if the repair can actually see the
-        // candidates that would finish the building it chose.  Those are appended *after*
-        // the cap, so the random truncation above can never discard them -- a popular
-        // building is visible from tens of thousands of candidates, and a shuffle that
-        // keeps 6,000 of them at random would drop the point of the whole operator.  The
-        // target's own list is capped separately so one building cannot swamp the pool.
         if (target_b != UINT32_MAX && st.cov[target_b] < req_[target_b]) {
             if (st.touch_stamp[target_b] != st.touch_epoch) {
                 st.touch_stamp[target_b] = st.touch_epoch;
@@ -968,17 +836,12 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
             if (take == avail) {
                 for (uint32_t q = lo; q < hi; ++q) pool.push_back(bc_items_[q]);
             } else {
-                // A stride keeps the retained set spread over the whole list rather than
-                // clustered at one end of the candidate numbering, which is spatial.
                 const uint32_t step = avail / take;
                 const uint32_t off = randBelow(rng, step);
                 for (uint32_t j = 0; j < take; ++j) pool.push_back(bc_items_[lo + j * step + off]);
             }
         }
 
-        // Score the pool once, then insert greedily.  Gains only shrink as antennas are
-        // added, so a cached value is an upper bound: scan in descending order and stop
-        // as soon as the next bound cannot beat the best found so far.
         ranked.clear();
         for (uint32_t ci : pool) {
             if (st.chosen[ci]) continue;
@@ -1007,10 +870,6 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
                 }
             }
 
-            // With two or more antennas still to place, a pair that finishes one of the
-            // disturbed buildings may beat any single move -- and at tau = 0.75 it is the
-            // only kind of move that raises the score at all.  A few are checked exactly;
-            // more than that costs more than the repair is worth.
             if (int(added.size()) + 2 <= budget && !disturbed.empty()) {
                 uint32_t tried = 0;
                 double best_pair_val = -1.0;
@@ -1055,12 +914,6 @@ long long Optimizer::lnsRound(const OptimizeParams& p, SearchState& st, Solution
                       [](const Ranked& a, const Ranked& b) { return a.val > b.val; });
         }
 
-        // ---- accept or roll back --------------------------------------------------
-        // Improvements and plateau moves are kept; plateau walking is what lets the search
-        // drift along equal-score ridges instead of freezing at the first local optimum.
-        // A small fraction of slightly worse states is kept too, with the loss bounded, so
-        // the walk can cross a shallow dip.  `best` is tracked separately, so nothing
-        // found is ever lost by wandering.
         bool keep =
             st.score > cur_score || (st.score == cur_score && st.phi >= cur_phi - 1e-12);
         if (!keep && st.score == cur_score && st.phi >= cur_phi - 1.0 && randUnit(rng) < 0.02)
@@ -1125,9 +978,6 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
     for (int r = 0; r < n_rep; ++r)
         rngs[r] = seedFrom(p.seed + uint64_t(r) * 0x9E3779B97F4A7C15ULL);
 
-    // ---- phase 1: greedy, one per replica -----------------------------------------
-    // Replica 0 runs the deterministic greedy, so the guaranteed starting point is always
-    // in the pool; the rest sample among near-best moves and land somewhere else.
 #pragma omp parallel for schedule(static, 1)
     for (int r = 0; r < n_rep; ++r) {
         states[r].init(n_buildings_, layout_.total_slots, n_cands_);
@@ -1137,9 +987,6 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
         bests[r].phi = states[r].phi;
     }
 
-    // Exact re-ranking of the top replicas; see OptimizeParams::exact_score.  The cache is
-    // keyed on the replica's slot score and phi, which together change whenever its best
-    // solution does, so an idle replica costs nothing.
     std::vector<uint32_t> ex_val(n_rep_z, 0);
     std::vector<uint32_t> ex_at_score(n_rep_z, UINT32_MAX);
     std::vector<double> ex_at_phi(n_rep_z, -1.0);
@@ -1173,8 +1020,6 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
                 ex_at_phi[size_t(r)] = bests[r].phi;
                 ++ex_evals;
             }
-            // Ties go to the higher slot score, which is the order they are visited in, so
-            // a strict comparison is enough.
             if (best_r < 0 || ex_val[size_t(r)] > best_ex) {
                 best_ex = ex_val[size_t(r)];
                 best_r = r;
@@ -1201,7 +1046,6 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
                      nowSec() - t_start);
     }
 
-    // ---- phase 2: LNS in synchronised rounds ---------------------------------------
     long long total_iters = 0;
     int round = 0;
     while (nowSec() < t_end) {
@@ -1216,12 +1060,6 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
         lead = leader();
         const Solution gb = bests[lead];
 
-        // Recycle the *trailing half* onto the leading solution.  Pulling everything that
-        // is behind collapses all replicas onto one trajectory within a round or two and
-        // the extra cores stop buying anything; leaving the upper half alone keeps several
-        // genuinely different solutions alive while the hopeless ones are put back to work
-        // somewhere useful.  Those that are pulled keep their own random streams, so they
-        // diverge again immediately.
         std::vector<std::pair<uint32_t, int>> rank;
         rank.reserve(n_rep_z);
         for (int r = 0; r < n_rep; ++r) rank.emplace_back(bests[r].score, r);
@@ -1229,18 +1067,11 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
                   [](const std::pair<uint32_t, int>& a, const std::pair<uint32_t, int>& b) {
                       return a.first > b.first;
                   });
-        // Worst-first list of replicas eligible to be restarted somewhere better.
         std::vector<int> recyclable;
         for (size_t i = n_rep_z; i-- > n_rep_z / 2;)
             if (rank[i].second != lead && bests[rank[i].second].score < gb.score)
                 recyclable.push_back(rank[i].second);
 
-        // ---- immigration -----------------------------------------------------------
-        // Publish our leader, then take the best few elites the other islands have
-        // published.  They land in the replicas that were about to be restarted on our own
-        // leader anyway, so a foreign solution costs nothing and a copy of something we
-        // already have is what it displaces.  If no island is running this is all a no-op
-        // bar one file write.
         std::vector<Solution> foreign;
         size_t adopted = 0;
         uint32_t best_foreign = 0;
@@ -1254,8 +1085,6 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
             if (!foreign.empty()) best_foreign = foreign[0].score;
 
             const size_t want = size_t(std::max(0, p.immigrants));
-            // A foreign elite that beats our leader is worth a replica even when nothing
-            // was due for recycling -- that is the whole point of running many islands.
             if (recyclable.empty() && !foreign.empty() && foreign[0].score > gb.score) {
                 int worst = rank.back().second;
                 if (worst != lead) recyclable.push_back(worst);
@@ -1307,4 +1136,4 @@ std::vector<Solution> Optimizer::solve(const OptimizeParams& p) {
     return bests;
 }
 
-}  // namespace gis
+}

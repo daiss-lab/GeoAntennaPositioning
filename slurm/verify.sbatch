@@ -1,9 +1,4 @@
 #!/bin/bash
-# Independent verification of a solution file, by sampling rather than by the solver's
-# own analytic method.
-#
-#   SOLUTION=results/tau0.5_k500.txt sbatch slurm/verify.sbatch
-#
 #SBATCH --job-name=giscup-ver
 #SBATCH --partition=batch
 #SBATCH --nodes=1

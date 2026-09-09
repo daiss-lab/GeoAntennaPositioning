@@ -1,22 +1,4 @@
 #!/bin/bash
-# Three questions in one small array, on two cells, with the arm varying fastest so a
-# partly-finished run is still readable:
-#
-#   A  1 job,  32 replicas,  600 s              reference
-#   B  1 job,  32 replicas, 2400 s              4x the wall clock, same cores
-#   C  4 jobs, 32 replicas,  600 s, sharing     4x the cores as one search
-#   D  4 jobs, 32 replicas,  600 s, no sharing  4x the cores as four searches
-#
-#   B vs A  does more time still buy score, or has the search converged?
-#   C vs A  does the island model convert cores into score?
-#   C vs D  does migration beat simply taking the best of the same four runs?
-#
-# C against D is the comparison that matters, and it is deliberately at equal cost.  Four
-# independent runs and best-of-four is what anyone gets for free by launching four jobs;
-# the island model only earns its complexity if it beats that.
-#
-#   sbatch --array=0-19%20 slurm/islands_ab.sbatch
-#
 #SBATCH --job-name=gis4-isab
 #SBATCH --partition=batch
 #SBATCH --nodes=1
@@ -36,11 +18,9 @@ BIN="${BIN:-./bin/gis_cup}"
 OUTDIR="${OUTDIR:-results/isab}"
 REP=32
 
-# Two cells: one where the tau = 0.5 near-miss population is large, one where it is not.
 CELL_TAU=(0.5 0.75)
 CELL_K=(1000 500)
 
-# Ten slots per cell: A, B, C0..C3, D0..D3.
 I="${SLURM_ARRAY_TASK_ID:-0}"
 SLOT=$(( I % 10 ))
 CI=$(( I / 10 ))

@@ -1,9 +1,4 @@
 #!/bin/bash
-# Visibility precompute: the one expensive stage, shared by all nine sub-problems.
-#
-#   sbatch slurm/precompute.sbatch
-#   DATA=data/eval.bin CACHE=data/eval_arcs.bin sbatch slurm/precompute.sbatch
-#
 #SBATCH --job-name=giscup-pre
 #SBATCH --partition=batch
 #SBATCH --nodes=1

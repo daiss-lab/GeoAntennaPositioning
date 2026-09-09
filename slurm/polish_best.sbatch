@@ -1,21 +1,4 @@
 #!/bin/bash
-# Across-edge polish of the best answer currently held for every sub-problem, then assemble
-# a checked submission from the result.
-#
-# Two purposes, and the second is the more important one:
-#
-#   1. Score.  §4.1 measured the across-edge move on one arm's answers.  Five of the nine
-#      cells have a better answer than that arm's, from somewhere else in the five trees,
-#      and those have never had the operator applied to them.  The move is monotone, so
-#      this cannot lose anything.
-#
-#   2. A rehearsal.  `pipeline5.sh` has never been run end to end, and the evaluation
-#      dataset lands 2026-08-15.  This exercises the same two final stages -- refine each
-#      cell, then re-score, verify and assemble -- against real answers, so the parts that
-#      would fail at 03:00 on submission day fail here instead.
-#
-#   sbatch --array=0-8%9 slurm/polish_best.sbatch
-#
 #SBATCH --job-name=gis5-pbest
 #SBATCH --partition=batch
 #SBATCH --nodes=1
@@ -60,8 +43,6 @@ echo "---- before ----"
 echo "---- after ----"
 "$BIN" score --data "$DATA" --solution "$DST"
 
-# The polish is monotone against the answer it was given, but a file that failed to write
-# must not be able to lose the cell.
 BEFORE=$(awk 'NR==3{n=split($0,a,","); c=0; for(i=1;i<=n;i++) if(length(a[i])>0) c++; print c}' "$IN")
 AFTER=$(awk 'NR==3{n=split($0,a,","); c=0; for(i=1;i<=n;i++) if(length(a[i])>0) c++; print c}' "$DST" 2>/dev/null || echo -1)
 if [ "${AFTER:--1}" -lt "${BEFORE}" ]; then

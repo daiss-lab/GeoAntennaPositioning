@@ -1,27 +1,4 @@
 #!/bin/bash
-# restart5.sbatch -- sequential restarts for the cells that converge long before the window
-# closes.  Submitted by hand on competition day; see the reasoning below.
-#
-# pipeline5 gives every (cell, seed) one search running to an absolute deadline, which is
-# right for the cells that are still climbing at the end of the window.  On the competition
-# parameters it is wrong for six of the nine: k = 9 and k = 49 are small enough that a
-# 32-replica search stalls after about half an hour, and the measured seed spread says the
-# stall is a local optimum rather than the answer --
-#
-#     tau=0.68 k=9 : 227 239 228 233   (5.3% between the best and worst seed)
-#     tau=0.68 k=49: 1126 1121 1139 1132
-#     tau=0.49 k=49: 2475 2491 2510 2477
-#     tau=0.32 k=9 : 1345 1345 1345 1345   (converged, and every seed agrees)
-#
-# A cell whose seeds disagree by 5% is short of restarts, not short of time.  So each task
-# here runs a fresh search every RESTART seconds with a new seed until the same absolute
-# deadline, and keeps its own best.  Twenty-six restarts in the window instead of one.
-#
-# Files are written as s1<task>_tau<tau>_k<k>.txt, which the s* glob in polish5.sbatch and
-# finalize5.sbatch already picks up, so nothing downstream needs to know this ran.  Each
-# restart writes to a scratch file and only replaces the task's answer if it is strictly
-# better, judged by the emitted claim line -- the same quantity finalize ranks on, never a
-# solver's opinion of its own run.
 
 #SBATCH --job-name=gis5-restart
 #SBATCH --partition=batch
@@ -39,8 +16,6 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 : "${DATA:?}" "${CACHE:?}" "${BIN:?}" "${RUN:?}" "${SOLVE_END:?}"
 RESTART="${RESTART:-1800}"
 
-# Weighted by the seed spread measured above: the cells whose seeds disagree most get the
-# most independent restarts, and the two that every seed already agrees on get the fewest.
 TARGETS=(
     "0.68 9"   "0.68 9"   "0.68 9"   "0.68 9"   "0.68 9"   "0.68 9"
     "0.68 49"  "0.68 49"  "0.68 49"  "0.68 49"  "0.68 49"
@@ -73,8 +48,6 @@ BEST=-1
 N=0
 while [ "$(date +%s)" -lt "$SOLVE_END" ]; do
     LEFT=$(( SOLVE_END - $(date +%s) ))
-    # Don't start a restart that cannot finish: a truncated search is worse than the time
-    # handed back, and the last partial one would just be thrown away anyway.
     [ "$LEFT" -lt 300 ] && break
     BUDGET=$(( LEFT < RESTART ? LEFT : RESTART ))
     SEED=$(( 7919 + I * 104729 + N * 7907 ))

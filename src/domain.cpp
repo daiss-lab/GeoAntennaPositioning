@@ -14,14 +14,11 @@ void readVec(std::ifstream& fh, std::vector<T>& v, size_t n) {
     if (!fh) throw std::runtime_error("truncated input binary");
 }
 
-// Round to a multiple of 4096.  Subtracting such a value from a coordinate of a few
-// hundred thousand metres is exact in IEEE-754 (the result's ulp is finer than the
-// input's), so the translation is perfectly reversible.
 double quantizeOrigin(double v) {
     return std::floor(v / 4096.0 + 0.5) * 4096.0;
 }
 
-}  // namespace
+}
 
 void Domain::load(const std::string& path) {
     std::ifstream fh(path, std::ios::binary);
@@ -129,7 +126,6 @@ void Domain::buildGrid(double cell_size) {
     const size_t n_cells = size_t(nx_) * size_t(ny_);
     std::vector<uint32_t> counts(n_cells + 1, 0);
 
-    // Two passes so the CSR arrays are sized exactly.
     auto forEachCell = [&](uint32_t e, auto&& fn) {
         const Vec2 a = edgeA(e), b = edgeB(e);
         int32_t x0 = int32_t((std::min(a.x, b.x) - min_.x) * inv_cell_);
@@ -157,7 +153,6 @@ void Domain::buildGrid(double cell_size) {
 
 bool Domain::radiusExceedsGrid(double radius) const {
     const double cells = (2.0 * radius * inv_cell_ + 1.0);
-    // Past this point scanning every edge is cheaper than walking the cell range.
     return cells * cells > double(n_vertices_);
 }
 
@@ -189,4 +184,4 @@ void Domain::appendAllEdges(GridScratch& scratch, std::vector<uint32_t>& out) co
         if (scratch.testAndSet(e)) out.push_back(e);
 }
 
-}  // namespace gis
+}

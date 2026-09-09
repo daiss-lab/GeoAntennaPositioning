@@ -21,13 +21,11 @@ struct BldInterval {
     }
 };
 
-}  // namespace
+}
 
 EvalResult evaluateExact(const Domain& dom, const std::vector<Candidate>& antennas,
                          const EvalParams& ep, const VisibilityParams& vp_in) {
     VisibilityParams vp = vp_in;
-    // Uncapped by default: the optimiser may have worked with a shorter working radius,
-    // and any extra coverage found here is real coverage we are entitled to claim.
     vp.max_radius = (ep.max_radius > 0.0) ? ep.max_radius : dom.diagonal() * 1.001;
     vp.min_arc_len = 0.0;
 
@@ -87,8 +85,6 @@ EvalResult evaluateExact(const Domain& dom, const std::vector<Candidate>& antenn
     EvalResult res;
     res.ratio.assign(dom.numBuildings(), 0.0);
 
-    // One linear sweep: intervals are grouped by building and sorted by start, so the
-    // union length falls out without any per-building allocation.
     size_t i = 0;
     while (i < all.size()) {
         const uint32_t b = all[i].building;
@@ -111,8 +107,6 @@ EvalResult evaluateExact(const Domain& dom, const std::vector<Candidate>& antenn
     }
 
     const double band = ep.knife_eps * std::max(1.0, ep.tau);
-    // Anything at or above this is worth writing down even though we cannot show it clears
-    // tau; see EvalParams::claim_band for why the asymmetry is in our favour.
     const double claim_floor = ep.tau - ep.claim_band * std::max(1.0, ep.tau);
     for (uint32_t b = 0; b < dom.numBuildings(); ++b) {
         const double r = res.ratio[b];
@@ -138,4 +132,4 @@ EvalResult evaluateExact(const Domain& dom, const std::vector<Candidate>& antenn
     return res;
 }
 
-}  // namespace gis
+}

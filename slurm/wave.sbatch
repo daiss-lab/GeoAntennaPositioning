@@ -1,12 +1,4 @@
 #!/bin/bash
-# One wave of the island search: ISLANDS jobs on each of the nine sub-problems, every
-# process publishing its leader into a per-cell share directory and adopting the best it
-# finds there.  Submitted by pipeline4.sh, which sets the array size and the deadline.
-#
-# The share directory is deliberately *not* cleared between waves.  A wave-2 island reads
-# it at its first synchronisation point and adopts everything wave 1 found, so restarting
-# costs a greedy construction (seconds) rather than the wave.
-#
 #SBATCH --job-name=gis4-wave
 #SBATCH --partition=batch
 #SBATCH --nodes=1
@@ -31,9 +23,6 @@ WAVE="${WAVE:-1}"
 REP="${REP:-${SLURM_CPUS_PER_TASK:-128}}"
 SYNC="${SYNC:-120}"
 
-# The nine sub-problems.  If the organisers publish different values these two arrays are
-# the only place that changes -- and slurm/robust.sbatch exists to have already measured
-# that the solver holds up across a much wider grid than this one.
 TAUS=(0.25 0.25 0.25 0.5 0.5 0.5 0.75 0.75 0.75)
 KS=(50 500 1000 50 500 1000 50 500 1000)
 
@@ -54,8 +43,6 @@ OUT="${OUTDIR}/w${WAVE}_tau${TAU}_k${K}_isl${ISL}.txt"
 echo "host=$(hostname) wave=${WAVE} cell=${CELL} island=${ISL} tau=${TAU} k=${K} deadline=${DEADLINE}"
 date -u +"start %Y-%m-%dT%H:%M:%SZ"
 
-# --time is a ceiling the deadline overrides whenever it is nearer, so a wave that starts
-# late shortens itself instead of running past the window.
 "$BIN" solve \
     --data "$DATA" --cache "$CACHE" \
     --tau "$TAU" --k "$K" \

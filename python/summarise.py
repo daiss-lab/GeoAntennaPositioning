@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Summarise an experiment directory as a paired arm-vs-cell table.
-
-Every number here comes from counting the claim line of an emitted answer file, which is
-the same thing the independent scorer counts -- never from a solver reporting on its own
-run.  The slot model and the exact evaluator disagree by up to 12.8% at tau = 0.5, so a
-figure a solver prints about itself is not comparable across arms.
-
-    python3 python/summarise.py results/lead --pattern 'a(?P<arm>\\d+)_s(?P<seed>\\d+)'
-"""
 import argparse
 import collections
 import glob
@@ -16,9 +7,7 @@ import re
 import subprocess
 import sys
 
-
 def score(path):
-    """Buildings claimed by an answer file: the length of its third line."""
     try:
         lines = open(path).read().strip().split("\n")
     except OSError:
@@ -27,7 +16,6 @@ def score(path):
         return None
     body = lines[2].strip()
     return len([x for x in body.split(",") if x.strip()]) if body else 0
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -42,10 +30,6 @@ def main():
                     help="report anyway, clearly labelled; for watching progress only")
     args = ap.parse_args()
 
-    # An arm that costs more per iteration has completed less search at any fixed moment of
-    # wall clock, so reading every arm at one instant penalises exactly the arm under test.
-    # That is not a small effect and it has the sign of a real result, so it is refused by
-    # default rather than warned about.
     if args.job:
         out = subprocess.run(["sacct", "-j", args.job, "--format=JobID%20,State", "-n"],
                              stdout=subprocess.PIPE, universal_newlines=True).stdout
@@ -63,7 +47,7 @@ def main():
     cell_re = re.compile(r"tau(?P<tau>[\d.]+)_k(?P<k>\d+)")
     arm_re = re.compile(args.pattern)
 
-    table = collections.defaultdict(dict)   # (arm, seed) -> cell -> score
+    table = collections.defaultdict(dict)
     for path in sorted(glob.glob(os.path.join(args.directory, "*.txt"))):
         base = os.path.basename(path)
         c, a = cell_re.search(base), arm_re.match(base)
@@ -87,8 +71,6 @@ def main():
         total = f"{sum(row.values()):13d}" if complete else "     partial"
         print(f"{key[0] + '/' + key[1]:14s}{body}{total}")
 
-    # Paired deltas against the first arm, which every one of these designs uses as its
-    # control.  A mean over cells hides sign changes, so both are printed.
     arms = sorted({k[0] for k in table})
     if len(arms) > 1:
         base = arms[0]
@@ -107,7 +89,6 @@ def main():
                 loss = sum(1 for d in deltas if d < 0)
                 print(f"  {arm:>6s}: sum {sum(deltas):+5d}  mean {sum(deltas)/len(deltas):+6.1f}  "
                       f"{wins}W/{loss}L/{len(deltas)-wins-loss}T over {len(deltas)} pairs")
-
 
 if __name__ == "__main__":
     main()

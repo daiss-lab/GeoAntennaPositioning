@@ -1,21 +1,4 @@
 #!/bin/bash
-# Greedy-only evaluation: what each solver's construction phase is worth before any LNS.
-#
-# `--time 0` makes the LNS loop's `while (nowSec() < t_end)` false on entry, so the run is
-# greedy plus the final exact evaluation and nothing else.  `--replicas 1` pins Solution02
-# to replica 0, which is its plain deterministic greedy -- the randomised starts exist to
-# feed the LNS and would only add noise to a measurement of the construction itself.  Both
-# solvers are therefore deterministic here and the seed is recorded only for the log.
-#
-# Laid out as the same 2x2 as bench.sbatch, {Solution01, Solution02} x {600 m, 2400 m
-# cache}, because the working radius is a flag both accept and folding its effect into the
-# solver comparison would misattribute it.
-#
-# Every answer is re-scored by `score`, so all 36 numbers come from one evaluator reading
-# the emitted files rather than from each solver marking its own work.
-#
-#   sbatch slurm/greedy.sbatch
-#
 #SBATCH --job-name=giscup-greedy
 #SBATCH --partition=batch
 #SBATCH --array=0-8

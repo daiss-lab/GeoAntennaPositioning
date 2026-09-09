@@ -1,17 +1,3 @@
-// solve_cmd.cpp -- the `solve` subcommand: pick k antennas for one (tau, k) pair, score
-// the result exactly, and write the answer.
-//
-// Two things here are not obvious from the name.
-//
-// The search optimises a discretised, radius-capped model of coverage; the answer is
-// scored by the exact evaluator.  Those two disagree by a few per cent, and not uniformly
-// -- so the placement the search likes best is not reliably the placement that scores
-// best.  Every replica's solution is therefore evaluated exactly and the winner chosen on
-// the real number rather than on the proxy.
-//
-// And the answer is written repeatedly, not once.  A submission window is a wall clock,
-// not a budget: a job killed at the wrong moment must still leave a valid, scored file
-// behind.  Each synchronisation point rewrites the output atomically.
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -45,10 +31,6 @@ double unixNow() {
            1000.0;
 }
 
-// Coordinates are written with 17 significant digits so the exact IEEE-754 doubles the
-// solver used survive the round trip through text.  The write goes to a temporary file and
-// is renamed into place, so a reader never sees a half-written answer -- which matters
-// because this is called from checkpoints while the search is still running.
 void writeSolution(const std::string& path, const Domain& dom, double tau, uint32_t k,
                    const std::vector<Candidate>& antennas, const EvalResult& res) {
     const std::string tmp = path + ".tmp";
@@ -71,9 +53,6 @@ void writeSolution(const std::string& path, const Domain& dom, double tau, uint3
         throw std::runtime_error("cannot move " + tmp + " into place");
 }
 
-// Turns a selection of candidate indices into the antenna list, padded to exactly k.
-// Padding is only ever needed when the candidate pool is exhausted; an extra antenna can
-// never reduce coverage, so it is always safe.
 std::vector<Candidate> materialise(const VisCache& cache, const std::vector<uint32_t>& sel,
                                    uint32_t k) {
     std::vector<Candidate> antennas;
@@ -88,7 +67,7 @@ std::vector<Candidate> materialise(const VisCache& cache, const std::vector<uint
     return antennas;
 }
 
-}  // namespace
+}
 
 int runSolve(const SolveOptions& o) {
     Domain dom;
@@ -147,14 +126,6 @@ int runSolve(const SolveOptions& o) {
     op.target_sample = o.target_sample;
     op.target_pool = o.target_pool;
     op.sync_interval_sec = o.sync_interval;
-    // Back to the identity, which is the value that keeps Phi submodular and greedy's
-    // approximation guarantee with it.  A tau- and k-dependent default of gamma = 2 was
-    // briefly in place here, fitted to the sweeps in explanation.md §8.4/§8.4a -- but every
-    // one of those runs began from the broken greedy fixed in optimize.cpp (an exhausted
-    // re-scoring guard abandoned the construction and the top-up loop filled the budget in
-    // candidate-index order).  Those sweeps therefore measured how well an exponent repairs
-    // a near-random start, which is not the question.  Both are being re-run; until they
-    // report, the default is the value that needs no evidence to justify it.
     op.phi_exponent = (o.phi_exponent >= 0.0) ? o.phi_exponent : 1.0;
     std::fprintf(stderr, "  phi exponent %.4g (%s)\n", op.phi_exponent,
                  (o.phi_exponent >= 0.0) ? "from --phi-exp" : "default");
@@ -175,8 +146,6 @@ int runSolve(const SolveOptions& o) {
         std::fprintf(stderr, "  island %d sharing through %s (%d immigrants per sync)\n",
                      op.island, op.share_dir.c_str(), op.immigrants);
 
-    // An absolute deadline overrides the budget whenever it is nearer.  Two minutes are
-    // held back for the final exact evaluation and the write.
     op.time_budget_sec = o.time_budget;
     if (o.deadline_epoch > 0.0) {
         const double left = o.deadline_epoch - unixNow() - 120.0;
@@ -186,30 +155,11 @@ int runSolve(const SolveOptions& o) {
     }
     if (op.time_budget_sec < 0.0) op.time_budget_sec = 0.0;
 
-    // ---- slot margin, measured rather than assumed --------------------------------
-    //
-    // The search ranks placements by the slot model and the answer is scored by the exact
-    // evaluator, and the two disagree.  How much they disagree is not a constant: on the
-    // sample dataset the slot model *understates* the score at tau = 0.25, matches it to a
-    // building at tau = 0.75, and overstates it by up to 12.8% at tau = 0.5.  Wherever it
-    // overstates, the search stops working on buildings it believes are finished and the
-    // evaluator does not, and those buildings pile up just under the threshold -- 446 of
-    // them in the incumbent tau = 0.5, k = 1000 answer, all within 2% of tau.
-    //
-    // A margin makes the search aim at tau*(1+m) so that a building it calls finished is
-    // genuinely finished.  The size of m is the whole question, and a constant fitted to
-    // this dataset is exactly the kind of number that does not survive a change of city --
-    // the evaluation tau and k are not promised to be the ones measured here either.  So
-    // it is measured instead: run the greedy alone (a couple of seconds), score that
-    // placement exactly, and look at the buildings the slot model called finished that the
-    // evaluator did not.  The margin is a high quantile of how far short they actually
-    // fell.  On a dataset where the two models agree, that set is empty and the margin
-    // comes out at zero on its own.
     double margin = o.slot_margin;
     if (margin < 0.0) {
         const double t_cal = nowSec();
         OptimizeParams cal = op;
-        cal.time_budget_sec = 0.0;  // greedy only; the LNS loop is false on entry
+        cal.time_budget_sec = 0.0;
         cal.replicas = 1;
         cal.verbose = false;
         cal.share_dir.clear();
@@ -224,18 +174,12 @@ int runSolve(const SolveOptions& o) {
             const EvalResult r = evaluateExact(dom, ants, cp, vp);
             const std::vector<double> slot_ratio = opt.slotRatios(cs[0].cand_idx);
 
-            // Only the buildings where the proxy is optimistic say anything about the
-            // margin.  Where it is pessimistic the search is already working harder than
-            // it needs to and a margin would make that worse, so those are left out.
             std::vector<double> shortfall;
             for (uint32_t b = 0; b < dom.numBuildings(); ++b) {
-                if (slot_ratio[b] < o.tau) continue;      // proxy did not claim it
-                if (r.ratio[b] >= o.tau) continue;        // and the evaluator agreed
+                if (slot_ratio[b] < o.tau) continue;
+                if (r.ratio[b] >= o.tau) continue;
                 shortfall.push_back((o.tau - r.ratio[b]) / o.tau);
             }
-            // A margin is only worth its cost when the proxy is over-claiming enough to
-            // matter.  Below this the population is noise and a margin would just make the
-            // search work harder for buildings it was already going to get.
             const double over_frac =
                 r.serviced.empty() ? 0.0
                                    : double(shortfall.size()) / double(r.serviced.size());
@@ -247,16 +191,6 @@ int runSolve(const SolveOptions& o) {
                     size_t(o.slot_margin_quantile * double(shortfall.size() - 1) + 0.5);
                 q_margin = shortfall[q];
 
-                // The quantile alone is not enough, and the tau = 0.5 case is why.  Most of
-                // what the proxy over-claims there are Solution01's knife-edge rectangles:
-                // two adjacent walls are *exactly* half the perimeter, so the exact ratio
-                // lands a few parts per million under tau while the slot model rounds it
-                // up.  The measured shortfall is then ~1e-5 -- true, and useless, because
-                // the search cannot ask for a fraction of a slot.  A margin has to move
-                // `required` by at least a slot or two to change any decision at all.
-                //
-                // Half a millimetre of extra perimeter is all those buildings need, so the
-                // floor costs almost nothing and converts the whole population.
                 uint32_t median_n = layout.count(0);
                 {
                     std::vector<uint32_t> ns;
@@ -286,15 +220,6 @@ int runSolve(const SolveOptions& o) {
                      o.tau * (1.0 + margin), o.tau);
     }
 
-    // Let the search pick its leader by the exact evaluator rather than by the slot proxy.
-    // The two disagree at the top: across 291 shortlists in the Solution02-04 logs, the
-    // best slot score was also the best exact score only 53% of the time, and the true
-    // winner sat as deep as rank 7 of the 8 that were checked.  Since every synchronisation
-    // point copies the leader into the trailing replicas, half of those rounds were
-    // propagating a solution that was not the best one held and overwriting one that was.
-    //
-    // One exact evaluation costs about 0.4 s against a 60 s round, and results are cached
-    // per replica, so only replicas that actually moved are re-scored.
     if (o.exact_lead > 0) {
         op.exact_score = [&](const std::vector<uint32_t>& sel) -> uint32_t {
             const std::vector<Candidate> antennas = materialise(cache, sel, o.k);
@@ -307,8 +232,6 @@ int runSolve(const SolveOptions& o) {
                      o.exact_lead);
     }
 
-    // Checkpoint: write a fully scored, valid answer at every synchronisation point, so
-    // being killed mid-search costs the improvement since the last one and nothing else.
     uint32_t ckpt_best = 0;
     bool have_ckpt = false;
     if (!o.out.empty()) {
@@ -331,12 +254,6 @@ int runSolve(const SolveOptions& o) {
     std::fprintf(stderr, "  search done in %.1f s, best slot-score %u\n", nowSec() - t0,
                  sols.empty() ? 0u : sols[0].score);
 
-    // The slot model is an approximation, and a mildly optimistic one.  Score the top few
-    // replicas exactly and keep whichever is genuinely best; the slot ranking and the
-    // exact ranking disagree often enough to be worth the seconds.
-    // Replicas share their best solution as they run, so several usually end the search
-    // holding the same placement.  Evaluating the same thing eight times costs seconds and
-    // tells us nothing, so identical selections are collapsed first.
     const double t1 = nowSec();
     int best_i = 0, evaluated = 0;
     EvalResult best_res;
@@ -352,7 +269,7 @@ int runSolve(const SolveOptions& o) {
 
         std::vector<Candidate> antennas = materialise(cache, sols[i].cand_idx, o.k);
         EvalParams cp = ep;
-        if (evaluated != 0) cp.explain_building = -1;  // only narrate the first
+        if (evaluated != 0) cp.explain_building = -1;
         EvalResult r = evaluateExact(dom, antennas, cp, vp);
         std::fprintf(stderr, "    placement %zu: slot-score %u -> exact %zu\n", i,
                      sols[i].score, r.serviced.size());
@@ -392,4 +309,4 @@ int runSolve(const SolveOptions& o) {
     return 0;
 }
 
-}  // namespace gis
+}

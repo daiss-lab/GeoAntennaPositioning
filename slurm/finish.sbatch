@@ -1,14 +1,4 @@
 #!/bin/bash
-# The last stage: re-score every answer from the file itself, verify a sample of them
-# against the independent sampling checker, and assemble the submission.
-#
-# Re-scoring matters because it is the only step that reads the emitted file the way the
-# organisers will -- coordinates only, snapped back onto the boundary, no access to the
-# solver's internal state.  An answer that scores differently here than the solver
-# reported is an answer with a bug in it, and this is where that shows up.
-#
-#   sbatch slurm/finish.sbatch
-#
 #SBATCH --job-name=giscup-finish
 #SBATCH --partition=batch
 #SBATCH --nodes=1
@@ -44,8 +34,6 @@ for I in "${!TAUS[@]}"; do
         fail=1
         continue
     fi
-    # --rewrite is a no-op when the claim line already matches, and repairs it when it
-    # does not, so the submitted file is always consistent with its own coordinates.
     ./bin/gis_cup score --data "$DATA" --solution "$F" --rewrite "$F"
 done
 

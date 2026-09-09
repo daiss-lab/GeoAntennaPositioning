@@ -1,15 +1,4 @@
 #!/bin/bash
-# What does the working radius cost, and what is it worth?
-#
-# The cache caps sight-lines at MAX_RANGE.  Anything beyond that is invisible to the
-# search but still counted by the exact evaluator, so a cap that is too tight makes the
-# optimiser blind to coverage it is nonetheless entitled to claim -- on the sample dataset
-# a single antenna 1800 m away supplies 31% of one building's perimeter.  This builds the
-# cache at several radii and reports time and size for each, so the default can be chosen
-# on measurements instead of on a guess.
-#
-#   sbatch slurm/range.sbatch
-#
 #SBATCH --job-name=giscup-range
 #SBATCH --partition=batch
 #SBATCH --nodes=1

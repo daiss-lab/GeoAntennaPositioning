@@ -1,19 +1,4 @@
 #!/bin/bash
-# Sanity check for the difficulty weighting before any of it is measured at scale.
-#
-# Three things have to be true, and each is checked here rather than assumed:
-#
-#   1. beta = 0 reproduces Solution04 bit for bit.  The weighting multiplies Phi by w_b and
-#      w_b is 1.0 everywhere when the feature is off, so the same seed must give the same
-#      slot score.  If it does not, the refactor changed the search and every A/B after
-#      this one is measuring two things at once.
-#   2. m_b is measured, and is cheap.  The line it prints carries the mean and how many
-#      buildings need more than three antennas to themselves; at tau = 0.75 that number
-#      should be large and at tau = 0.25 it should be near zero.  That is the whole premise.
-#   3. beta > 0 runs and produces a valid answer.
-#
-#   sbatch slurm/smoke5.sbatch
-#
 #SBATCH --job-name=gis5-smoke
 #SBATCH --partition=debug
 #SBATCH --nodes=1
@@ -39,9 +24,6 @@ export OMP_PLACES=cores
 
 echo "host=$(hostname)"
 
-# tau = 0.75 is where the premise lives: half the buildings are unservable and under a flat
-# Phi their partial coverage still steers the ranking.  tau = 0.25 is the control, where
-# almost every building is a one-antenna job and the weighting should do nothing at all.
 for cell in "0.75 500" "0.25 500"; do
     set -- $cell
     TAU=$1 K=$2

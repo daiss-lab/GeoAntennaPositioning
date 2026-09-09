@@ -1,24 +1,4 @@
 #!/bin/bash
-# A one-dimensional, seed-paired sweep of any solve flag, over a chosen set of cells.
-#
-# Two design choices come from watching the first attempt at this crawl on a contended
-# cluster, where 238 jobs were pending from other users and a 216-task array got four slots:
-#
-#   * The arm varies FASTEST with the array index.  An array that runs in index order and
-#     is only partly through gives complete paired comparisons for the cells it reached,
-#     instead of every run of one arm and none of the others -- which is what the first
-#     version produced, and it was worth nothing.
-#   * Tasks are small: 32 cores, not 128.  A small task backfills into gaps a large one
-#     cannot use, and on a full machine throughput matters far more than per-run quality.
-#
-# The first value in VALUES is the control by convention; python/collect.py reports the
-# other arms as deltas against it.
-#
-#   FLAG=slot-margin VALUES="0 0.005 0.01 0.02 0.04" CELLS="4 5 3 1 8" SEEDS="11 22" \
-#       TAG=margin sbatch --array=0-49%32 slurm/sweep.sbatch
-#
-# The array size must be (values) * (seeds) * (cells).
-#
 #SBATCH --job-name=gis4-sweep
 #SBATCH --partition=batch
 #SBATCH --nodes=1
@@ -39,7 +19,6 @@ FLAG="${FLAG:?set FLAG to the solve option to sweep, without the leading --}"
 VALUES="${VALUES:?set VALUES to a space-separated list}"
 TAG="${TAG:-$FLAG}"
 SEEDS_STR="${SEEDS:-11 22}"
-# Indices into the nine standard cells; defaults to all of them.
 CELLS_STR="${CELLS:-0 1 2 3 4 5 6 7 8}"
 BUDGET="${BUDGET:-600}"
 REP="${REP:-${SLURM_CPUS_PER_TASK:-32}}"
@@ -57,7 +36,6 @@ TAUS=(0.25 0.25 0.25 0.5 0.5 0.5 0.75 0.75 0.75)
 KS=(50 500 1000 50 500 1000 50 500 1000)
 
 I="${SLURM_ARRAY_TASK_ID:-0}"
-# Arm varies fastest, then cell, then seed.
 VI=$(( I % NV ))
 REST=$(( I / NV ))
 CI=$(( REST % NC ))
