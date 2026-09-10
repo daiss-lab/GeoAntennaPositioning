@@ -2,6 +2,8 @@
 
 #### This project aims to find a solution to the GIS cup problem under SIGSPATIAL 2026. Given a set of building footprints as polygons and a number of antennas, this project finds the placement of antennas that maximizes the coverage of service among the buildings.
 
+To learn more about the problem details, please visit [GIS Cup 2026](https://sigspatial2026.sigspatial.org/giscup.html).
+
 ## Layout
 
     src/            C++17 solver: candidates, visibility, search, refinement, scoring
